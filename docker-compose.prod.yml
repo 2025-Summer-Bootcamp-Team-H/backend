@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 데이터베이스 (관리형 DB 사용 권장)
+  postgres:
+    image: postgres:15
+    container_name: insurance_postgres_prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/utils/sql/init_database.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    restart: unless-stopped
+    networks:
+      - insurance_network
+    # 프로덕션에서는 포트 노출하지 않음
+    # ports:
+    #   - "5432:5432"
+
+
+
+  # 백엔드 API (FastAPI) - 프로덕션 설정
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: insurance_backend_prod
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+      - ENVIRONMENT=production
+    volumes:
+      - ./uploads:/app/uploads
+      # 프로덕션에서는 소스코드 볼륨 마운트 제거
+      # - ./backend:/app
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - insurance_network
+    # 프로덕션에서는 Nginx를 통해서만 접근
+    # ports:
+    #   - "8000:8000"
+
+  # Nginx (리버스 프록시) - 프로덕션 설정
+  nginx:
+    image: nginx:alpine
+    container_name: insurance_nginx_prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./uploads:/var/www/uploads:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - insurance_network
+
+volumes:
+  postgres_data:
+
+networks:
+  insurance_network:
+    driver: bridge 

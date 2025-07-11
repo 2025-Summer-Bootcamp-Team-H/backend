@@ -1,0 +1,39 @@
+# 프로덕션용 Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 시스템 패키지 설치 (PDF 처리용)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-kor \
+    && rm -rf /var/lib/apt/lists/*
+
+# 보안을 위한 비루트 사용자 생성
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Python 의존성 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 애플리케이션 코드 복사
+COPY . .
+
+# 업로드 디렉토리 권한 설정
+RUN mkdir -p /app/uploads/diagnosis /app/uploads/receipts && \
+    chown -R appuser:appuser /app
+
+# 비루트 사용자로 전환
+USER appuser
+
+# PYTHONPATH 환경변수 설정
+ENV PYTHONPATH=/app
+
+# 포트 노출
+EXPOSE 8000
+
+# 프로덕션 모드로 실행 (reload 제거)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"] 
