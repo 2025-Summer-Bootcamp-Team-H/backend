@@ -393,4 +393,144 @@ class ClaimCalculator:
         if "수술" in clause_name:
             return f"수술 특약 '{clause.clause_name}': {diagnosis.diagnosis_name} 수술로 {amount:,.0f}원 지급"
         
-        return f"특약 '{clause.clause_name}': {amount:,.0f}원 지급" 
+        return f"특약 '{clause.clause_name}': {amount:,.0f}원 지급"
+    
+    def calculate_claim_with_clauses(self, claim_id: int, clauses: List[InsuranceClause]) -> Dict:
+        """
+        특정 특약들만을 사용하여 보험금을 계산합니다.
+        """
+        claim = self.db.query(Claim).filter(Claim.id == claim_id).first()
+        if not claim:
+            raise ValueError("청구 정보를 찾을 수 없습니다.")
+        
+        diagnosis = claim.diagnosis
+        receipt = claim.receipt
+        
+        # 기존 계산 결과 삭제
+        self.db.query(ClaimCalculation).filter(
+            ClaimCalculation.claim_id == claim_id
+        ).delete()
+        
+        calculations = []
+        total_amount = 0
+        
+        # 전달받은 특약들만 계산
+        for clause in clauses:
+            # 특약 적용 가능 여부 확인
+            if self._is_clause_applicable_for_claim(clause, diagnosis, receipt):
+                amount = self._calculate_clause_amount(clause, diagnosis, receipt)
+                
+                if amount > 0:
+                    calculation = ClaimCalculation(
+                        claim_id=claim_id,
+                        clause_id=clause.id,
+                        calculated_amount=amount,
+                        calculation_logic=self._get_calculation_logic(clause, diagnosis, receipt, amount)
+                    )
+                    calculations.append(calculation)
+                    total_amount += amount
+        
+        # 총 보험금이 실제 의료비를 초과하지 않도록 제한
+        actual_medical_cost = receipt.total_amount
+        if total_amount > actual_medical_cost:
+            reduction_ratio = actual_medical_cost / total_amount
+            
+            for calc in calculations:
+                original_amount = calc.calculated_amount
+                calc.calculated_amount = original_amount * reduction_ratio
+                calc.calculation_logic += f" → 의료비 한도 적용: {original_amount:,.0f} × {reduction_ratio:.2%} = {calc.calculated_amount:,.0f}원"
+            
+            total_amount = actual_medical_cost
+        
+        # 계산 결과 저장
+        for calc in calculations:
+            self.db.add(calc)
+        
+        # 청구 금액 업데이트
+        claim.claim_amount = total_amount
+        self.db.commit()
+        
+        return {
+            "claim_id": claim_id,
+            "total_amount": total_amount,
+            "calculations": [
+                {
+                    "clause_name": calc.clause.clause_name,
+                    "category": calc.clause.category,
+                    "calculated_amount": calc.calculated_amount,
+                    "calculation_logic": calc.calculation_logic
+                }
+                for calc in calculations
+            ]
+        }
+    
+    def _is_clause_applicable_for_claim(self, clause: InsuranceClause, diagnosis, receipt) -> bool:
+        """특약이 해당 케이스에 적용 가능한지 확인"""
+        clause_name = clause.clause_name.lower()
+        diagnosis_name = diagnosis.diagnosis_name.lower()
+        category = clause.category.lower()
+        
+        # 암 관련 특약
+        if "암" in clause_name:
+            return "암" in diagnosis_name or "cancer" in diagnosis_name.lower()
+        
+        # 골절 관련 특약
+        if "골절" in clause_name:
+            return "골절" in diagnosis_name
+        
+        # 입원 관련 특약
+        if "입원" in clause_name or "입원" in category:
+            return diagnosis.admission_days > 0
+        
+        # 외래/통원 관련 특약
+        if any(word in clause_name for word in ["외래", "통원"]) or any(word in category for word in ["외래", "통원"]):
+            return diagnosis.admission_days == 0
+        
+        # 진단 관련 특약
+        if "진단" in clause_name or "진단" in category:
+            return True  # 모든 진단에 적용 가능
+        
+        # 수술 관련 특약 (수술 키워드가 있는 경우)
+        if "수술" in clause_name:
+            return "수술" in diagnosis.diagnosis_text or "절제" in diagnosis.diagnosis_text
+        
+        # 질병 관련 특약
+        if "질병" in clause_name:
+            return True  # 모든 질병에 적용 가능
+        
+        # 상해 관련 특약
+        if "상해" in clause_name:
+            # ICD 코드 S로 시작하는 경우 상해
+            return diagnosis.icd_code and diagnosis.icd_code.startswith("S")
+        
+        return False
+    
+    def _calculate_clause_amount(self, clause: InsuranceClause, diagnosis, receipt) -> float:
+        """특약별 보험금 계산"""
+        category = clause.category.lower()
+        clause_name = clause.clause_name.lower()
+        
+        # 진단 특약 - 정액 지급
+        if "진단" in clause_name or "진단" in category:
+            return clause.per_unit
+        
+        # 입원 특약 - 입원일수 × 일당
+        if "입원" in clause_name or "입원" in category:
+            if diagnosis.admission_days > 0:
+                return min(diagnosis.admission_days * clause.per_unit, clause.max_total)
+            return 0
+        
+        # 외래/통원 특약 - 실제 의료비와 특약 한도 중 작은 값
+        if any(word in clause_name for word in ["외래", "통원"]) or any(word in category for word in ["외래", "통원"]):
+            if diagnosis.admission_days == 0:
+                return min(receipt.total_amount, clause.per_unit)
+            return 0
+        
+        # 수술 특약 - 정액 지급
+        if "수술" in clause_name:
+            if "수술" in diagnosis.diagnosis_text or "절제" in diagnosis.diagnosis_text:
+                return clause.per_unit
+            return 0
+        
+        # 기타 특약 - 정액 지급
+        return clause.per_unit 
