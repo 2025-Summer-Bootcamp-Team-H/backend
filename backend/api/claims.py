@@ -156,6 +156,16 @@ async def get_claims(db: Session = Depends(get_db)):
         # 담당자명 조인
         user = db.query(User).filter(User.id == claim.user_id).first()
         user_name = user.name if user else None
+        
+        # status 업데이트: claim_amount > 0이면 "passed", 0이면 "failed"
+        if claim.claim_amount > 0:
+            claim.status = "passed"
+        else:
+            claim.status = "failed"
+        
+        # DB에 status 업데이트 저장
+        db.commit()
+        
         results.append({
             "claim_id": claim.id,
             "patient_name": claim.patient_name,

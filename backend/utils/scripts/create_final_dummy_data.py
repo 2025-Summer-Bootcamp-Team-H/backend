@@ -621,6 +621,9 @@ def create_medical_and_claim_data(db, clause_objects, products):
             failed_count += 1
         
         # Create claim for all cases
+        # status 설정: claim_amount > 0이면 "passed", 0이면 "failed"
+        claim_status = "passed" if total_claim > 0 else "failed"
+        
         claim = Claim(
             user_id=user_ids[i % 5],
             patient_name=patient_data["name"],
@@ -629,7 +632,7 @@ def create_medical_and_claim_data(db, clause_objects, products):
             receipt_id=receipt.id,
             claim_amount=total_claim,
             claim_reason=claim_reason,
-            status="pending",
+            status=claim_status,
             created_at=datetime.utcnow()
         )
         db.add(claim)
