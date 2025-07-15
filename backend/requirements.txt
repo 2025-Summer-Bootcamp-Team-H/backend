@@ -62,3 +62,6 @@ pymupdf==1.23.8
 
 #더미데이터 생성
 Faker
+
+#ci 필요
+redis
