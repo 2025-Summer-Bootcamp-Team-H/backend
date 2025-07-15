@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from services.claim_calculator import ClaimCalculator
 import json
 from datetime import datetime
+from collections import Counter, defaultdict
+from datetime import date
 
 router = APIRouter()
 
@@ -177,6 +179,90 @@ async def get_claims(db: Session = Depends(get_db)):
         })
     return results 
 
+def mask_ssn(ssn: str) -> str:
+    if ssn and len(ssn) >= 8:
+        return ssn[:7] + "******"
+    return ssn
+
+@router.get("/claims/search", summary="환자명/상태로 청구 이력 검색", description="이름 또는 상태로 청구 이력 반환 (전체 청구 목록과 동일한 flat 구조)")
+async def search_claims_by_patient_name(
+    patient_name: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Claim)
+    if patient_name:
+        query = query.filter(Claim.patient_name == patient_name)
+    if status:
+        query = query.filter(Claim.status == status)
+    claims = query.all()
+    results = []
+    for claim in claims:
+        diagnosis = db.query(MedicalDiagnosis).filter(MedicalDiagnosis.id == claim.diagnosis_id).first()
+        diagnosis_name = diagnosis.diagnosis_name if diagnosis else None
+        user = db.query(User).filter(User.id == claim.user_id).first()
+        user_name = user.name if user else None
+        results.append({
+            "claim_id": claim.id,
+            "patient_name": claim.patient_name,
+            "diagnosis_name": diagnosis_name,
+            "claim_amount": claim.claim_amount,
+            "created_at": claim.created_at,
+            "user_name": user_name,
+            "status": claim.status
+        })
+    return results
+
+@router.get("/claims/statistics/{claim_id}", summary="청구 상세 통계 조회", description="특정 청구 건의 환자 기준 통계(이력, 승인/거절 비율, 진단명/월별 트렌드) 반환")
+async def get_claim_statistics(claim_id: int, db: Session = Depends(get_db)):
+    claim = db.query(Claim).filter(Claim.id == claim_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="청구를 찾을 수 없습니다")
+    patient_name = claim.patient_name
+    patient_ssn = claim.patient_ssn
+    patient_claims = db.query(Claim).filter(
+        Claim.patient_name == patient_name,
+        Claim.patient_ssn == patient_ssn
+    ).order_by(Claim.created_at.desc()).all()
+    claim_history = [
+        {
+            "claim_id": c.id,
+            "diagnosis_name": db.query(MedicalDiagnosis).filter(MedicalDiagnosis.id == c.diagnosis_id).first().diagnosis_name if c.diagnosis_id else None,
+            "claim_amount": c.claim_amount,
+            "status": c.status,
+            "created_at": c.created_at
+        }
+        for c in patient_claims
+    ]
+    status_counter = Counter(c.status for c in patient_claims)
+    approval_stats = {
+        "approved": status_counter.get("approved", 0),
+        "rejected": status_counter.get("rejected", 0),
+        "passed": status_counter.get("passed", 0),
+        "failed": status_counter.get("failed", 0),
+        "total": len(patient_claims)
+    }
+    diagnosis_trend = defaultdict(lambda: defaultdict(int))
+    for c in patient_claims:
+        diagnosis = db.query(MedicalDiagnosis).filter(MedicalDiagnosis.id == c.diagnosis_id).first()
+        if diagnosis:
+            month = c.created_at.strftime("%Y-%m")
+            diagnosis_trend[diagnosis.diagnosis_name][month] += 1
+    diagnosis_trend_list = [
+        {"diagnosis_name": d, "monthly": dict(months)}
+        for d, months in diagnosis_trend.items()
+    ]
+    patient_info = {
+        "patient_name": patient_name,
+        "patient_ssn": patient_ssn
+    }
+    return {
+        "patient_info": patient_info,
+        "claim_history": claim_history,
+        "approval_stats": approval_stats,
+        "diagnosis_trend": diagnosis_trend_list
+    }
+
 @router.get("/claims/{claim_id}", summary="청구 상세정보 조회", description="요약된 청구 상세정보 조회")
 async def get_claim_details(claim_id: int, db: Session = Depends(get_db)):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
@@ -257,4 +343,23 @@ async def get_claim_details(claim_id: int, db: Session = Depends(get_db)):
         "claim_amount": claim.claim_amount,
         "clauses": clauses,
         "review_basis": review_basis
-    } 
+    }
+
+@router.delete("/claims/{claim_id}", summary="청구 개별 삭제", description="특정 claim_id의 청구를 삭제")
+async def delete_claim(claim_id: int, db: Session = Depends(get_db)):
+    claim = db.query(Claim).filter(Claim.id == claim_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="청구를 찾을 수 없습니다")
+    # 관련 ClaimCalculation 등도 함께 삭제(필요시)
+    db.query(ClaimCalculation).filter(ClaimCalculation.claim_id == claim_id).delete()
+    db.delete(claim)
+    db.commit()
+    return {"message": f"청구 {claim_id}가 삭제되었습니다."}
+
+@router.delete("/claims", summary="청구 전체 삭제", description="모든 청구 데이터를 삭제")
+async def delete_all_claims(db: Session = Depends(get_db)):
+    # ClaimCalculation 등 종속 데이터 먼저 삭제
+    db.query(ClaimCalculation).delete()
+    db.query(Claim).delete()
+    db.commit()
+    return {"message": "모든 청구 데이터가 삭제되었습니다."} 

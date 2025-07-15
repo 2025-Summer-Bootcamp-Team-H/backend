@@ -12,6 +12,7 @@ import os
 import json
 import random
 from datetime import datetime, date, timedelta
+from faker import Faker
 
 # Add the backend directory to the Python path for imports
 backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -282,113 +283,99 @@ def calculate_claim_amount(clause_names, clause_objects, diagnosis_name, treatme
     return total_amount, applied_clauses
 
 def create_realistic_patients():
-    """Create 20 realistic patients with various medical conditions"""
-    patients = [
-        # Passed cases (14개) - 보험금 지급
-        {
-            "name": "박영수", "ssn": "850315-1234567", "diagnosis": "급성 심근경색증", 
-            "hospital": "서울아산병원", "treatment_type": "입원치료", "medical_cost": 2500000, 
-            "admission_days": 7, "expected_amount": 350000, "status": "passed"
-        },
-        {
-            "name": "이미영", "ssn": "920728-2345678", "diagnosis": "유방암", 
-            "hospital": "삼성서울병원", "treatment_type": "수술", "medical_cost": 5000000, 
-            "admission_days": 14, "expected_amount": 1700000, "status": "passed"
-        },
-        {
-            "name": "정민호", "ssn": "780612-1345678", "diagnosis": "당뇨병성 신증", 
-            "hospital": "연세세브란스병원", "treatment_type": "통원치료", "medical_cost": 150000, 
-            "admission_days": 0, "expected_amount": 150000, "status": "passed"
-        },
-        {
-            "name": "최지원", "ssn": "950403-2456789", "diagnosis": "폐렴", 
-            "hospital": "서울성모병원", "treatment_type": "입원치료", "medical_cost": 800000, 
-            "admission_days": 5, "expected_amount": 500000, "status": "passed"
-        },
-        {
-            "name": "강서연", "ssn": "881120-1567890", "diagnosis": "교통사고로 인한 다발성 골절", 
-            "hospital": "한양대학교병원", "treatment_type": "수술", "medical_cost": 3200000, 
-            "admission_days": 21, "expected_amount": 1050000, "status": "passed"
-        },
-        {
-            "name": "윤준호", "ssn": "930515-1678901", "diagnosis": "뇌졸중", 
-            "hospital": "고려대학교병원", "treatment_type": "입원치료", "medical_cost": 1800000, 
-            "admission_days": 12, "expected_amount": 600000, "status": "passed"
-        },
-        {
-            "name": "송은지", "ssn": "890722-1789012", "diagnosis": "위암", 
-            "hospital": "서울대학교병원", "treatment_type": "수술", "medical_cost": 4500000, 
-            "admission_days": 18, "expected_amount": 1900000, "status": "passed"
-        },
-        {
-            "name": "한동현", "ssn": "910830-1890123", "diagnosis": "십이지장궤양", 
-            "hospital": "경희대학교병원", "treatment_type": "입원치료", "medical_cost": 1200000, 
-            "admission_days": 8, "expected_amount": 400000, "status": "passed"
-        },
-        {
-            "name": "조성민", "ssn": "870415-1901234", "diagnosis": "고혈압", 
-            "hospital": "분당차병원", "treatment_type": "통원치료", "medical_cost": 80000, 
-            "admission_days": 0, "expected_amount": 80000, "status": "passed"
-        },
-        {
-            "name": "임수진", "ssn": "940625-2012345", "diagnosis": "관절염", 
-            "hospital": "부산대학교병원", "treatment_type": "통원치료", "medical_cost": 120000, 
-            "admission_days": 0, "expected_amount": 120000, "status": "passed"
-        },
-        {
-            "name": "배현우", "ssn": "860918-2123456", "diagnosis": "협심증", 
-            "hospital": "전남대학교병원", "treatment_type": "입원치료", "medical_cost": 900000, 
-            "admission_days": 6, "expected_amount": 300000, "status": "passed"
-        },
-        {
-            "name": "신지은", "ssn": "920112-2234567", "diagnosis": "기관지염", 
-            "hospital": "충남대학교병원", "treatment_type": "통원치료", "medical_cost": 60000, 
-            "admission_days": 0, "expected_amount": 60000, "status": "passed"
-        },
-        {
-            "name": "권태영", "ssn": "880725-2345678", "diagnosis": "갑상선기능항진증", 
-            "hospital": "경북대학교병원", "treatment_type": "통원치료", "medical_cost": 100000, 
-            "admission_days": 0, "expected_amount": 100000, "status": "passed"
-        },
-        {
-            "name": "안서현", "ssn": "930328-2456789", "diagnosis": "부정맥", 
-            "hospital": "전북대학교병원", "treatment_type": "입원치료", "medical_cost": 700000, 
-            "admission_days": 4, "expected_amount": 200000, "status": "passed"
-        },
-        
-        # Failed cases (6개) - 보험금 미지급
-        {
-            "name": "최일우", "ssn": "000830-3381025", "diagnosis": "감기", 
-            "hospital": "동네의원", "treatment_type": "통원치료", "medical_cost": 15000, 
-            "admission_days": 0, "expected_amount": 0, "status": "failed", "reason": "가입하지 않은 특약"
-        },
-        {
-            "name": "김보험", "ssn": "850101-2567890", "diagnosis": "치아교정", 
-            "hospital": "치과의원", "treatment_type": "통원치료", "medical_cost": 500000, 
-            "admission_days": 0, "expected_amount": 0, "status": "failed", "reason": "치과치료는 보장하지 않음"
-        },
-        {
-            "name": "이청구", "ssn": "920515-2678901", "diagnosis": "미용성형", 
-            "hospital": "성형외과", "treatment_type": "수술", "medical_cost": 3000000, 
-            "admission_days": 1, "expected_amount": 0, "status": "failed", "reason": "미용성형은 보장하지 않음"
-        },
-        {
-            "name": "박매니저", "ssn": "780830-2789012", "diagnosis": "산전검사", 
-            "hospital": "산부인과", "treatment_type": "통원치료", "medical_cost": 200000, 
-            "admission_days": 0, "expected_amount": 0, "status": "failed", "reason": "산전검사는 보장하지 않음"
-        },
-        {
-            "name": "김다현", "ssn": "950625-2890123", "diagnosis": "예방접종", 
-            "hospital": "예방의학과", "treatment_type": "통원치료", "medical_cost": 80000, 
-            "admission_days": 0, "expected_amount": 0, "status": "failed", "reason": "예방접종은 보장하지 않음"
-        },
-        {
-            "name": "김수현", "ssn": "881215-2901234", "diagnosis": "피부미용", 
-            "hospital": "피부과", "treatment_type": "통원치료", "medical_cost": 150000, 
-            "admission_days": 0, "expected_amount": 0, "status": "failed", "reason": "미용치료는 보장하지 않음"
-        }
+    """
+    30명 환자, 150~200건 청구, 다양한 진단명/상품/특약/날짜/승인비율, 현실적인 데이터 분포
+    claim 상세내역, 보험금 산정, 통계/차트 모두 의미 있게 생성
+    """
+    fake = Faker('ko_KR')
+
+    KOREAN_NAMES = [
+        "김민수", "이서연", "박지훈", "최지우", "정민준", "김지민", "이준서", "박서연", "최현우", "정예린",
+        "김하준", "이하은", "박지후", "최유진", "정서윤", "김도윤", "이도현", "박하린", "최지안", "정하은",
+        "김시우", "이서진", "박지아", "최지호", "정지우", "김예준", "이하린", "박지민", "최서윤", "정하린"
     ]
-    
+    DIAGNOSES = [
+        "급성 심근경색증", "위암", "유방암", "뇌졸중", "대장암", "폐암", "협심증", "뇌출혈", "간암", "신장암",
+        "십이지장궤양", "고혈압", "관절염", "당뇨병", "부정맥", "기관지염", "폐렴", "골절", "탈구", "절상"
+    ]
+    HOSPITALS = [
+        "서울아산병원", "삼성서울병원", "연세세브란스병원", "서울성모병원", "한양대학교병원", "고려대학교병원",
+        "서울대학교병원", "경희대학교병원", "분당차병원", "부산대학교병원", "전남대학교병원", "충남대학교병원",
+        "경북대학교병원", "전북대학교병원", "동네의원", "치과의원", "성형외과", "산부인과", "예방의학과", "피부과"
+    ]
+    TREATMENTS = ["입원치료", "수술", "통원치료"]
+    STATUS_POOL = ["passed"] * 7 + ["failed"] * 3  # 7:3 비율
+
+    patients = []
+    for name in KOREAN_NAMES:
+        ssn = fake.ssn()
+        n_claims = random.randint(5, 7)
+        for _ in range(n_claims):
+            diagnosis = random.choice(DIAGNOSES)
+            hospital = random.choice(HOSPITALS)
+            treatment_type = random.choice(TREATMENTS)
+            admission_days = random.randint(3, 15) if treatment_type == "입원치료" else 0
+            medical_cost = random.randint(500_000, 3_000_000)
+            status = random.choice(STATUS_POOL)
+            # 날짜 분포: 최근 2년 내 월별 분산
+            months_ago = random.randint(0, 23)
+            diagnosis_date = (date.today().replace(day=1) - timedelta(days=months_ago*30)) + timedelta(days=random.randint(0, 27))
+            patients.append({
+                "name": name,
+                "ssn": ssn,
+                "diagnosis": diagnosis,
+                "hospital": hospital,
+                "treatment_type": treatment_type,
+                "medical_cost": medical_cost,
+                "admission_days": admission_days,
+                "expected_amount": 0,  # 실제 산정은 claim 생성 시
+                "status": status,
+                "diagnosis_date": diagnosis_date
+            })
+    # 최일우 환자 1건(이미지와 1:1 매칭, failed)
+    patients.append({
+        "name": "최일우",
+        "ssn": "000830-3381025",
+        "address": "서울특별시 양천구 목동로 186 목동신시가지아파트7단지 734-1301",
+        "phone": "010-9412-8362",
+        "diagnosis": "우측 손목 척골 돌기부 손상 골절 및 삼각섬유 연골판 부분 파열",
+        "hospital": "힘찬병원",
+        "treatment_type": "입원치료",
+        "medical_cost": 1200000,  # 예시 금액
+        "admission_days": 7,      # 예시 입원일수
+        "expected_amount": 0,
+        "status": "failed",
+        "diagnosis_date": date(2024, 5, 4),
+        "doctor_name": "유순용",
+        "icd_code": "S62.81"
+        # receipt_items 없음 (보험금 지급 불가)
+    })
+    # 최일우 환자 6건 추가 (모두 passed, receipt_items 포함)
+    passed_diagnoses = [
+        ("골절", "입원치료", {"입원료": 1_000_000}),
+        ("대장암", "수술", {"수술료": 1_500_000}),
+        ("급성 심근경색증", "입원치료", {"입원료": 1_200_000}),
+        ("위암", "수술", {"수술료": 2_000_000}),
+        ("뇌졸중", "입원치료", {"입원료": 1_100_000}),
+        ("암", "수술", {"수술료": 1_800_000, "검사료": 300_000})
+    ]
+    for i, (diagnosis, treatment_type, receipt_items) in enumerate(passed_diagnoses):
+        months_ago = i
+        diagnosis_date = (date.today().replace(day=1) - timedelta(days=months_ago*30)) + timedelta(days=random.randint(0, 27))
+        patients.append({
+            "name": "최일우",
+            "ssn": "000830-3381025",
+            "diagnosis": diagnosis,
+            "hospital": "힘찬병원",
+            "treatment_type": treatment_type,
+            "medical_cost": sum(receipt_items.values()),
+            "admission_days": random.randint(5, 15) if treatment_type == "입원치료" else 0,
+            "expected_amount": 0,
+            "status": "passed",
+            "diagnosis_date": diagnosis_date,
+            "receipt_items": receipt_items
+        })
+    random.shuffle(patients)
     return patients
 
 def match_and_calculate_realistic_clauses(patient_data, clause_objects):
@@ -483,25 +470,23 @@ def match_and_calculate_realistic_clauses(patient_data, clause_objects):
     return total_amount, matched_clauses, applied_clauses
 
 def create_medical_and_claim_data(db, clause_objects, products):
-    """Create comprehensive medical and claim data for 20 patients"""
-    print("\n🏥 Creating medical and claim data for 20 patients...")
-    
+    """
+    30명 환자, 150~200건 청구, 다양한 진단명/상품/특약/날짜/승인비율, 현실적인 데이터 분포
+    claim 상세내역, 보험금 산정, 통계/차트 모두 의미 있게 생성
+    """
+    print("\n🏥 Creating medical and claim data for 30 patients...")
     patients = create_realistic_patients()
     user_ids = [1, 2, 3, 4, 5]  # 5명의 보험사 직원
-    
     passed_count = 0
     failed_count = 0
-    
     for i, patient_data in enumerate(patients, 1):
-        print(f"\n👤 Creating patient {i}/20: {patient_data['name']} ({patient_data['status']})")
-        
+        print(f"\n👤 Creating patient {i}/{len(patients)}: {patient_data['name']} ({patient_data['status']})")
         # Create medical diagnosis
-        diagnosis_date = date.today() - timedelta(days=random.randint(1, 30))
+        diagnosis_date = patient_data["diagnosis_date"]
         doctor_name = f"Dr. {random.choice(['김의사', '이의사', '박의사', '최의사', '정의사'])}"
         icd_code = f"K{random.randint(10, 99)}.{random.randint(0, 9)}"
-        
         diagnosis = MedicalDiagnosis(
-            user_id=user_ids[i % 5],  # 5명의 보험사 직원이 순차적으로 담당
+            user_id=user_ids[i % 5],
             patient_name=patient_data["name"],
             patient_ssn=patient_data["ssn"],
             diagnosis_name=patient_data["diagnosis"],
@@ -515,11 +500,9 @@ def create_medical_and_claim_data(db, clause_objects, products):
         db.add(diagnosis)
         db.commit()
         db.refresh(diagnosis)
-        
         # Create medical receipt
         receipt_date = diagnosis.diagnosis_date + timedelta(days=1)
         treatment_details = f"{patient_data['treatment_type']} - {patient_data['diagnosis']}"
-        
         receipt = MedicalReceipt(
             user_id=user_ids[i % 5],
             patient_name=patient_data["name"],
@@ -531,27 +514,14 @@ def create_medical_and_claim_data(db, clause_objects, products):
         db.add(receipt)
         db.commit()
         db.refresh(receipt)
-        
-        # Create UserContract for each patient (보험 가입 계약)
-        # 환자별로 다른 보험상품 가입
-        product_choice = i % 3  # 3개 보험상품 중 하나 선택
+        # Create UserContract (보험 가입 계약)
+        product_choice = i % 3
         selected_product = products[product_choice]
-        
-        # 계약번호 생성 (환자별 고유 번호)
         contract_number = f"CONTRACT-{patient_data['ssn'][:6]}-{i:03d}"
-        
-        # 계약 기간 설정 (1년 계약)
-        start_date = date.today() - timedelta(days=random.randint(30, 365))
+        start_date = diagnosis_date - timedelta(days=random.randint(30, 365))
         end_date = start_date + timedelta(days=365)
-        
-        # 보험료 설정 (보험상품별로 다르게)
-        premium_amounts = {
-            "스마트보장보험": 50000,
-            "실손의료비보장보험": 30000,
-            "희망사랑보험": 80000
-        }
+        premium_amounts = {"스마트보장보험": 50000, "실손의료비보장보험": 30000, "희망사랑보험": 80000}
         premium_amount = premium_amounts.get(selected_product.name, 50000)
-        
         contract = UserContract(
             user_id=user_ids[i % 5],
             patient_name=patient_data["name"],
@@ -566,64 +536,51 @@ def create_medical_and_claim_data(db, clause_objects, products):
         db.add(contract)
         db.commit()
         db.refresh(contract)
-        
         print(f"  📋 Diagnosis: {patient_data['diagnosis']}")
         print(f"  🧾 Receipt: {patient_data['medical_cost']:,}원")
         print(f"  📄 Contract: {selected_product.name} 가입")
-        
         # Create claim for all cases (passed and failed)
+        # 청구일: 영수증일 + 0~2일 랜덤, 시간/분/초 랜덤
+        claim_created_at = datetime.combine(
+            receipt.receipt_date + timedelta(days=random.randint(0, 2)),
+            datetime.min.time()
+        ) + timedelta(
+            hours=random.randint(0, 23),
+            minutes=random.randint(0, 59),
+            seconds=random.randint(0, 59)
+        )
         if patient_data["status"] == "passed":
-            # Match and calculate realistic clauses
             total_claim, matched_clauses, applied_clauses = match_and_calculate_realistic_clauses(patient_data, clause_objects)
-            
-            # Create detailed claim reason with subscription and matching info
-            clause_details = []
-            for clause_info in applied_clauses:
-                clause_details.append(f"{clause_info['clause_name']}: {clause_info['amount']:,.2f}원")
-            
+            clause_details = [f"{c['clause_name']}: {c['amount']:,.2f}원" for c in applied_clauses]
             claim_reason = f"{patient_data['diagnosis']} 진단 및 치료 - " + ", ".join(clause_details)
-            
-            # Store detailed information including subscription and matching clauses
             detailed_info = {
-                "patient_subscriptions": matched_clauses,  # 환자가 가입한 특약들
-                "matched_clauses": matched_clauses,        # 매칭된 특약들
-                "applied_clauses": applied_clauses,        # 실제 적용된 특약들
+                "patient_subscriptions": matched_clauses,
+                "matched_clauses": matched_clauses,
+                "applied_clauses": applied_clauses,
                 "calculation_basis": f"진단명: {patient_data['diagnosis']}, 치료방법: {patient_data['treatment_type']}, 입원일수: {patient_data['admission_days']}일",
                 "subscription_status": "가입됨",
                 "matching_status": "매칭됨"
             }
-            
             claim_reason += f" | 상세내역: {json.dumps(detailed_info, ensure_ascii=False)}"
-            
             print(f"  💰 Claim: {total_claim:,.2f}원")
             print(f"  📝 Applied clauses: {', '.join(matched_clauses)}")
             passed_count += 1
-            
         else:
-            # Failed case - no matching, no calculation, just 0 amount
             total_claim = 0
             claim_reason = f"{patient_data['diagnosis']} - {patient_data.get('reason', '보장하지 않는 진료')}"
-            
-            # Store failed case detailed information
             detailed_info = {
-                "patient_subscriptions": [],  # 가입한 특약 없음
-                "matched_clauses": [],        # 매칭된 특약 없음
-                "applied_clauses": [],        # 적용된 특약 없음
+                "patient_subscriptions": [],
+                "matched_clauses": [],
+                "applied_clauses": [],
                 "calculation_basis": f"진단명: {patient_data['diagnosis']}, 치료방법: {patient_data['treatment_type']}",
                 "subscription_status": "미가입",
                 "matching_status": "미매칭",
                 "failure_reason": patient_data.get('reason', '보장하지 않는 진료')
             }
-            
             claim_reason += f" | 상세내역: {json.dumps(detailed_info, ensure_ascii=False)}"
-            
             print(f"  ❌ Failed reason: {patient_data.get('reason', '보장하지 않는 진료')} - 청구 생성 (0원)")
             failed_count += 1
-        
-        # Create claim for all cases
-        # status 설정: claim_amount > 0이면 "passed", 0이면 "failed"
         claim_status = "passed" if total_claim > 0 else "failed"
-        
         claim = Claim(
             user_id=user_ids[i % 5],
             patient_name=patient_data["name"],
@@ -633,19 +590,18 @@ def create_medical_and_claim_data(db, clause_objects, products):
             claim_amount=total_claim,
             claim_reason=claim_reason,
             status=claim_status,
-            created_at=datetime.utcnow()
+            created_at=claim_created_at
         )
         db.add(claim)
         db.commit()
-    
     print(f"\n✅ Medical and claim data created successfully!")
-    print(f"   - 20 Patients with medical cases")
+    print(f"   - {len(patients)} Patients with medical cases")
     print(f"   - {passed_count} Passed cases (보험금 지급)")
     print(f"   - {failed_count} Failed cases (보험금 미지급)")
-    print(f"   - 20 Diagnoses")
-    print(f"   - 20 Receipts")
-    print(f"   - 20 UserContracts (보험 가입 계약)")
-    print(f"   - 20 Claims (all cases)")
+    print(f"   - {len(patients)} Diagnoses")
+    print(f"   - {len(patients)} Receipts")
+    print(f"   - {len(patients)} UserContracts (보험 가입 계약)")
+    print(f"   - {len(patients)} Claims (all cases)")
 
 def main():
     """Main function to create all dummy data"""
@@ -670,7 +626,7 @@ def main():
         print("   - 1 Insurance Company (삼성생명)")
         print("   - 3 Insurance Products")
         print(f"   - {len(clause_objects)} Insurance Clauses (from extracted data)")
-        print("   - 20 Patients with medical cases")
+        print("   - 30 Patients with medical cases")
         print("   - 14 Passed cases (보험금 지급)")
         print("   - 6 Failed cases (보험금 미지급)")
         print("   - Diagnosis-clause matching logic implemented")
