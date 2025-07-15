@@ -9,6 +9,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres123
+          POSTGRES_DB: insurance_system
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     
     steps:
     - uses: actions/checkout@v3
@@ -31,6 +45,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
         pip install pytest pytest-asyncio httpx fastapi
+    
+    - name: Export DATABASE_URL
+      run: |
+        echo "DATABASE_URL=postgresql://postgres:postgres123@localhost:5432/insurance_system" >> $GITHUB_ENV
     
     - name: Run basic import tests
       run: |
