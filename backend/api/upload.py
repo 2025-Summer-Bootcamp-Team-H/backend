@@ -8,7 +8,7 @@ from models.database import get_db
 from models.models import MedicalDiagnosis, MedicalReceipt
 
 router = APIRouter()
-
+#경로지정
 UPLOAD_DIR = "./uploads"
 DIAGNOSIS_DIR = os.path.join(UPLOAD_DIR, "diagnosis")
 RECEIPT_DIR = os.path.join(UPLOAD_DIR, "receipts")
