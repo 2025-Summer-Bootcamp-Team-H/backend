@@ -34,26 +34,26 @@ jobs:
     
     - name: Run basic import tests
       run: |
-        cd backend/backend
+        cd backend
         python -c "import fastapi; print('FastAPI import successful')"
         python -c "from models.database import get_db; print('Database import successful')"
     
     - name: Lint with flake8
       run: |
         pip install flake8
-        cd backend/backend
+        cd backend
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || true
     
     - name: Check code formatting
       run: |
         pip install black
-        cd backend/backend
+        cd backend
         black --check --diff . || true
     
     - name: Run pytest (unit/integration)
       run: |
-        cd backend/backend
+        cd backend
         pytest
 
   security:
@@ -75,6 +75,6 @@ jobs:
     - name: Run security checks
       run: |
         pip install bandit
-        cd backend/backend
+        cd backend
         bandit -r . -f json -o bandit-report.json || true
         bandit -r . -f txt -o bandit-report.txt || true 
