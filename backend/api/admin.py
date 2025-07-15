@@ -66,32 +66,6 @@ async def get_claim_detail(claim_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"청구 상세 조회 실패: {str(e)}")
 
-@router.get("/claims/statistics",
-    summary="통계 조회",
-    description="보험금 청구 관련 통계를 조회합니다. 월별 청구 건수, 상태별 분포 통계(승인, 불승인) 등을 제공합니다.",
-    response_description="통계 정보")
-async def get_statistics(db: Session = Depends(get_db)):
-    """
-    통계 조회
-    - 월별 청구 건수, 상태별 분포 통계(승인,불승인) 등
-    """
-    try:
-        # TODO: 통계 계산 로직
-        # TODO: 월별, 상태별 통계
-        
-        return {
-            "monthly_claims": [
-                {"month": "2024-01", "count": 150},
-                {"month": "2024-02", "count": 180}
-            ],
-            "status_distribution": [
-                {"status": "pending", "count": 50},
-                {"status": "approved", "count": 200},
-                {"status": "rejected", "count": 30}
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}")
 
 @router.get("/claims/search",
     summary="청구 검색",
