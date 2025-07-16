@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 from collections import Counter, defaultdict
 from datetime import date
+from utils.auth import get_current_user
 
 router = APIRouter()
 
@@ -146,7 +147,12 @@ async def create_claim(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"청구 생성 실패: {str(e)}")
 
-@router.get("/claims", summary="청구 목록 조회", description="모든 청구목록 반환 (이름, 진단명, 보험금, 신청일, 담당자, 상태)")
+@router.get("/claims",
+    summary="보험금 청구 전체 목록 조회",
+    description="모든 보험금 청구 목록을 조회합니다.",
+    response_description="청구 목록",
+    dependencies=[Depends(get_current_user)]
+)
 async def get_claims(db: Session = Depends(get_db)):
     # All claims (passed + failed)
     claims = db.query(Claim).all()
@@ -184,7 +190,12 @@ def mask_ssn(ssn: str) -> str:
         return ssn[:7] + "******"
     return ssn
 
-@router.get("/claims/search", summary="환자명/상태로 청구 이력 검색", description="이름 또는 상태로 청구 이력 반환 (전체 청구 목록과 동일한 flat 구조)")
+@router.get("/claims/search",
+    summary="청구 검색",
+    description="환자명이나 청구 상태로 청구를 검색합니다.",
+    response_description="검색 결과",
+    dependencies=[Depends(get_current_user)]
+)
 async def search_claims_by_patient_name(
     patient_name: Optional[str] = None,
     status: Optional[str] = None,
@@ -213,7 +224,12 @@ async def search_claims_by_patient_name(
         })
     return results
 
-@router.get("/claims/statistics/{claim_id}", summary="청구 상세 통계 조회", description="특정 청구 건의 환자 기준 통계(이력, 승인/거절 비율, 진단명/월별 트렌드) 반환")
+@router.get("/claims/statistics/{claim_id}",
+    summary="청구 상세 통계 조회",
+    description="특정 청구의 통계 정보를 조회합니다.",
+    response_description="청구 통계 정보",
+    dependencies=[Depends(get_current_user)]
+)
 async def get_claim_statistics(claim_id: int, db: Session = Depends(get_db)):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
@@ -263,7 +279,12 @@ async def get_claim_statistics(claim_id: int, db: Session = Depends(get_db)):
         "diagnosis_trend": diagnosis_trend_list
     }
 
-@router.get("/claims/{claim_id}", summary="청구 상세정보 조회", description="요약된 청구 상세정보 조회")
+@router.get("/claims/{claim_id}",
+    summary="청구 상세 조회",
+    description="특정 청구의 상세 정보를 조회합니다.",
+    response_description="청구 상세 정보",
+    dependencies=[Depends(get_current_user)]
+)
 async def get_claim_details(claim_id: int, db: Session = Depends(get_db)):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
@@ -345,7 +366,12 @@ async def get_claim_details(claim_id: int, db: Session = Depends(get_db)):
         "review_basis": review_basis
     }
 
-@router.delete("/claims/{claim_id}", summary="청구 개별 삭제", description="특정 claim_id의 청구를 삭제")
+@router.delete("/claims/{claim_id}",
+    summary="개별 청구 삭제",
+    description="특정 청구를 삭제합니다.",
+    response_description="청구 삭제 결과",
+    dependencies=[Depends(get_current_user)]
+)
 async def delete_claim(claim_id: int, db: Session = Depends(get_db)):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
@@ -356,7 +382,12 @@ async def delete_claim(claim_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"청구 {claim_id}가 삭제되었습니다."}
 
-@router.delete("/claims", summary="청구 전체 삭제", description="모든 청구 데이터를 삭제")
+@router.delete("/claims",
+    summary="전체 청구 삭제",
+    description="모든 청구 데이터를 일괄 삭제합니다.",
+    response_description="전체 청구 삭제 결과",
+    dependencies=[Depends(get_current_user)]
+)
 async def delete_all_claims(db: Session = Depends(get_db)):
     # ClaimCalculation 등 종속 데이터 먼저 삭제
     db.query(ClaimCalculation).delete()
