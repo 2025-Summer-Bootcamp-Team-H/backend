@@ -55,7 +55,7 @@ async def upload_diagnosis(
             doctor_name="",
             icd_code="",
             admission_days=0,
-            image_url=f"/{file_path.replace(os.sep, '/')}"  # 경로 슬래시 통일
+            image_url = f"uploads/diagnosis/{filename}"  #위조 분석 경로 받아오기 위해 수정
         )
         db.add(diagnosis)
         db.commit()
@@ -105,7 +105,8 @@ async def upload_receipt(
             total_amount=0,
             hospital_name="",
             treatment_details="",
-            image_url=f"/{file_path.replace(os.sep, '/')}"
+            image_url = f"uploads/receipts/{filename}" #위조 분석 경로 받아오기 위해 수정
+
         )
 
         db.add(receipt)

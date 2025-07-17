@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, 
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from models.database import Base
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
@@ -196,12 +197,13 @@ class ForgeryAnalysis(Base):
     __tablename__ = "forgery_analysis"
     
     id = Column(Integer, primary_key=True, index=True)
-    diagnosis_id = Column(Integer, ForeignKey("medical_diagnoses.id"), nullable=False)
-    receipt_id = Column(Integer, ForeignKey("medical_receipts.id"), nullable=False)
-    analysis_result = Column(Text, nullable=False)
+    diagnosis_id = Column(Integer, ForeignKey("medical_diagnoses.id"), nullable=True)
+    receipt_id = Column(Integer, ForeignKey("medical_receipts.id"), nullable=True)
+    analysis_result = Column(String, nullable=False)  # "forged" or "authentic"
     confidence_score = Column(Float)
     fraud_indicators = Column(Text)
-    analysis_date = Column(DateTime(timezone=True), server_default=func.now())
+    analysis_date = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_deleted = Column(Boolean, default=False)
     
     # Relationships

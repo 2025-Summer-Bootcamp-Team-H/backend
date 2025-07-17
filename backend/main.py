@@ -9,7 +9,7 @@ from models.models import Base
 from api import upload, ocr, medical, forgeries, claims, pdf, auth
 
 # 데이터베이스 테이블 생성
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AI 보험금 청구 시스템 API",

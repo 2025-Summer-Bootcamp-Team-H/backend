@@ -5,7 +5,7 @@ python-multipart==0.0.6
 
 # 데이터베이스
 sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 
 # 인증 및 보안
 python-jose[cryptography]==3.3.0
@@ -28,7 +28,7 @@ nltk==3.8.1
 
 # 이미지 처리
 opencv-python==4.8.1.78
-Pillow==10.1.0
+Pillow==11.3.0
 
 # OCR
 pytesseract==0.3.10
@@ -65,3 +65,14 @@ Faker
 
 #ci 필요
 redis
+
+#위조분석때 필요함함
+torch
+torchvision
+Pillow
+numpy
+scikit-learn
+Pillow
+numpy
+scikit-learn
+

@@ -1,93 +1,55 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from models.database import get_db
+from models.schemas import ForgeryRequest
 from models.models import MedicalDiagnosis, MedicalReceipt, ForgeryAnalysis
-from typing import Optional
+from services.forgery_service import analyze_forgery_from_local_path
+from models.database import get_db
 
 router = APIRouter()
 
-# 진단서 위조분석
-@router.post("/diagnoses/forgeries/{diagnosis_id}",
-    summary="진단서 위조분석 실행",
-    description="AI를 사용하여 진단서 이미지의 위조 여부를 분석하고 결과를 데이터베이스에 저장합니다.",
-    response_description="위조분석 완료 메시지")
-async def analyze_diagnosis_forgery(diagnosis_id: int, db: Session = Depends(get_db)):
-    """
-    진단서 위조분석 실행
-    - AI API 호출하여 위조 여부 분석
-    - 결과를 DB에 저장
-    """
-    try:
-        # TODO: 진단서 이미지 조회
-        # TODO: AI API 호출 (위조분석)
-        # TODO: 결과 파싱
-        # TODO: DB에 결과 저장
-        
-        return {"message": "진단서 위조분석 완료", "diagnosis_id": diagnosis_id, "is_forged": False}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"위조분석 실패: {str(e)}")
+@router.post(
+    "/forgery_analysis",
+    summary="위조분석 실행",
+    description="진단서와 영수증을 위조분석합니다."
+)
+def analyze_forgery(data: ForgeryRequest, db: Session = Depends(get_db)):
+    # 진단서, 영수증 존재 확인
+    diagnosis = db.query(MedicalDiagnosis).filter_by(id=data.diagnosis_id).first()
+    if not diagnosis or not getattr(diagnosis, "image_url", None):
+        raise HTTPException(status_code=404, detail="Diagnosis not found or no image_url")
+    receipt = db.query(MedicalReceipt).filter_by(id=data.receipt_id).first()
+    if not receipt or not getattr(receipt, "image_url", None):
+        raise HTTPException(status_code=404, detail="Receipt not found or no image_url")
 
-@router.get("/diagnoses/forgeries/{diagnosis_id}",
-    summary="진단서 위조분석 결과 조회",
-    description="진단서의 위조분석 결과를 조회합니다.",
-    response_description="위조분석 결과")
-async def get_diagnosis_forgery_result(diagnosis_id: int, db: Session = Depends(get_db)):
-    """
-    진단서 위조분석 결과 조회
-    - 분석 완료 후 결과 확인용
-    """
-    try:
-        # TODO: 위조분석 결과 조회
-        # TODO: 결과 반환
-        
-        return {
-            "diagnosis_id": diagnosis_id,
-            "is_forged": False,
-            "confidence_score": 0.95,
-            "analysis_date": "2024-01-15T10:30:00"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"위조분석 결과 조회 실패: {str(e)}")
+    # 각각 위조분석
+    diagnosis_result = analyze_forgery_from_local_path(diagnosis.image_url)  # type: ignore
+    receipt_result = analyze_forgery_from_local_path(receipt.image_url)      # type: ignore
 
-# 영수증 위조분석
-@router.post("/receipts/forgeries/{receipt_id}",
-    summary="영수증 위조분석 실행",
-    description="AI를 사용하여 영수증 이미지의 위조 여부를 분석하고 결과를 데이터베이스에 저장합니다.",
-    response_description="위조분석 완료 메시지")
-async def analyze_receipt_forgery(receipt_id: int, db: Session = Depends(get_db)):
-    """
-    영수증 위조분석 실행
-    - AI API 호출하여 위조 여부 분석
-    - 결과를 DB에 저장
-    """
-    try:
-        # TODO: 영수증 이미지 조회
-        # TODO: AI API 호출 (위조분석)
-        # TODO: 결과 파싱
-        # TODO: DB에 결과 저장
-        
-        return {"message": "영수증 위조분석 완료", "receipt_id": receipt_id, "is_forged": False}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"위조분석 실패: {str(e)}")
+    # 결과 저장
+    forgery = ForgeryAnalysis(
+        diagnosis_id=data.diagnosis_id,
+        receipt_id=data.receipt_id,
+        analysis_result=f"diagnosis: {diagnosis_result['predicted_class']}, receipt: {receipt_result['predicted_class']}",
+        confidence_score=(diagnosis_result['confidence'] + receipt_result['confidence']) / 2,
+        fraud_indicators=None
+    )
+    db.add(forgery)
+    db.commit()
+    db.refresh(forgery)
 
-@router.get("/receipts/forgeries/{receipt_id}",
-    summary="영수증 위조분석 결과 조회",
-    description="영수증의 위조분석 결과를 조회합니다.",
-    response_description="위조분석 결과")
-async def get_receipt_forgery_result(receipt_id: int, db: Session = Depends(get_db)):
-    """
-    영수증 위조분석 결과 조회
-    - 분석 완료 후 결과 확인용
-    """
-    try:
-        # TODO: 위조분석 결과 조회
-        # TODO: 결과 반환
-        
-        return {
-            "receipt_id": receipt_id,
-            "is_forged": False,
-            "confidence_score": 0.92,
-            "analysis_date": "2024-01-15T10:30:00"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"위조분석 결과 조회 실패: {str(e)}") 
+    return {
+        "forgery_analysis_id": forgery.id,
+        "diagnosis_result": diagnosis_result,
+        "receipt_result": receipt_result
+    }
+
+@router.get(
+    "/forgery_analysis/{forgery_analysis_id}",
+    summary="위조분석 결과 조회",
+    description="위조분석 결과를 조회합니다."
+)
+def get_forgery_analysis(forgery_analysis_id: int, db: Session = Depends(get_db)):
+    forgery = db.query(ForgeryAnalysis).filter_by(id=forgery_analysis_id).first()
+    if not forgery:
+        raise HTTPException(status_code=404, detail="Forgery analysis not found")
+    return forgery

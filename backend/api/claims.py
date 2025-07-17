@@ -18,8 +18,10 @@ class ClaimCreateRequest(BaseModel):
     diagnosis_id: int
     receipt_id: int
 
+
 class BulkDeleteRequest(BaseModel):
     claim_ids: list[int]
+
 
 @router.post("/claims",
     summary="보험금 청구 생성",
@@ -368,6 +370,7 @@ async def get_claim_details(claim_id: int, db: Session = Depends(get_db)):
         "clauses": clauses,
         "review_basis": review_basis
     }
+
 
 @router.delete("/claims/bulk",
     summary="선택된 청구들 일괄 삭제",

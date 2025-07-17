@@ -4,7 +4,9 @@ from models.database import get_db
 from models.models import MedicalDiagnosis, MedicalReceipt
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
+from datetime import date, datetime
 from datetime import date
+
 
 router = APIRouter()
 
@@ -13,12 +15,17 @@ class DiagnosisUpdate(BaseModel):
     patient_name: Optional[str] = None
     patient_ssn: Optional[str] = None
     diagnosis_name: Optional[str] = None
+
     diagnosis_date: Optional[date] = None  # "YYYY-MM-DD"
+
     diagnosis_text: Optional[str] = None
     hospital_name: Optional[str] = None
     doctor_name: Optional[str] = None
     icd_code: Optional[str] = None
     admission_days: Optional[int] = None
+
+    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -70,7 +77,7 @@ async def ocr_diagnosis(diagnosis_id: int, db: Session = Depends(get_db)):
         # TODO: AI API 호출 (OpenAI/Anthropic)
         # TODO: OCR 결과 파싱
         # TODO: DB에 정보 업데이트
-        
+
         return {"message": "진단서 OCR 처리 완료", "diagnosis_id": diagnosis_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OCR 처리 실패: {str(e)}")
@@ -90,7 +97,44 @@ async def ocr_receipt(receipt_id: int, db: Session = Depends(get_db)):
         # TODO: AI API 호출 (OpenAI/Anthropic)
         # TODO: OCR 결과 파싱
         # TODO: DB에 정보 업데이트
-        
+
         return {"message": "영수증 OCR 처리 완료", "receipt_id": receipt_id}
     except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"OCR 처리 실패: {str(e)}")
+
+# HEAD에 있던 추가 함수들을 유지 (필요한 경우)
+@router.patch("/diagnoses/{diagnosis_id}",
+    summary="진단서 정보 수정",
+    description="진단서의 정보를 수동으로 수정하고 데이터베이스에 저장합니다.",
+    response_description="수정 완료 메시지")
+async def update_diagnosis(diagnosis_id: int, diagnosis_data: DiagnosisUpdate, db: Session = Depends(get_db)):
+    """
+    진단서 정보 수정후 저장
+    """
+    try:
+        diagnosis = db.query(MedicalDiagnosis).filter(
+            MedicalDiagnosis.id == diagnosis_id,
+            MedicalDiagnosis.is_deleted == False
+        ).first()
+
+        if not diagnosis:
+            raise HTTPException(status_code=404, detail="진단서를 찾을 수 없습니다.")
+
+        update_fields = diagnosis_data.model_dump(exclude_unset=True)
+
+        # date 타입은 자동으로 처리됨 (Pydantic이 자동 변환)
+        for field, value in update_fields.items():
+            setattr(diagnosis, field, value)
+
+        db.commit()
+        db.refresh(diagnosis)
+
+        return {"message": "진단서 정보 수정 완료", "diagnosis_id": diagnosis_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"진단서 정보 수정 실패: {str(e)}")
+
+# ... 나머지 함수들도 유사하게 유지
+=======
         raise HTTPException(status_code=500, detail=f"OCR 처리 실패: {str(e)}") 
+
