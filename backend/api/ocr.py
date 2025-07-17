@@ -5,6 +5,8 @@ from models.models import MedicalDiagnosis, MedicalReceipt
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
+from datetime import date
+
 
 router = APIRouter()
 
@@ -13,13 +15,17 @@ class DiagnosisUpdate(BaseModel):
     patient_name: Optional[str] = None
     patient_ssn: Optional[str] = None
     diagnosis_name: Optional[str] = None
-    diagnosis_date: Optional[date] = None  # date 타입 사용
+
+    diagnosis_date: Optional[date] = None  # "YYYY-MM-DD"
+
     diagnosis_text: Optional[str] = None
     hospital_name: Optional[str] = None
     doctor_name: Optional[str] = None
     icd_code: Optional[str] = None
     admission_days: Optional[int] = None
+
     
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -38,12 +44,11 @@ class DiagnosisUpdate(BaseModel):
 
 class ReceiptUpdate(BaseModel):
     patient_name: Optional[str] = None
-    treatment_date: Optional[date] = None  # origin/main의 필드명 사용
+    treatment_date: Optional[date] = None  # "YYYY-MM-DD"
     hospital_name: Optional[str] = None
     total_amount: Optional[float] = None
-    insurance_amount: Optional[float] = None  # origin/main의 새 필드
-    patient_payment: Optional[float] = None   # origin/main의 새 필드
-    
+    insurance_amount: Optional[float] = None
+    patient_payment: Optional[float] = None
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -95,6 +100,7 @@ async def ocr_receipt(receipt_id: int, db: Session = Depends(get_db)):
 
         return {"message": "영수증 OCR 처리 완료", "receipt_id": receipt_id}
     except Exception as e:
+
         raise HTTPException(status_code=500, detail=f"OCR 처리 실패: {str(e)}")
 
 # HEAD에 있던 추가 함수들을 유지 (필요한 경우)
@@ -129,3 +135,6 @@ async def update_diagnosis(diagnosis_id: int, diagnosis_data: DiagnosisUpdate, d
         raise HTTPException(status_code=500, detail=f"진단서 정보 수정 실패: {str(e)}")
 
 # ... 나머지 함수들도 유사하게 유지
+=======
+        raise HTTPException(status_code=500, detail=f"OCR 처리 실패: {str(e)}") 
+

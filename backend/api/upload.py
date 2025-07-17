@@ -106,6 +106,7 @@ async def upload_receipt(
             hospital_name="",
             treatment_details="",
             image_url = f"uploads/receipts/{filename}" #위조 분석 경로 받아오기 위해 수정
+
         )
 
         db.add(receipt)
