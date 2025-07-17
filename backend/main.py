@@ -6,10 +6,10 @@ import os
 
 from models.database import get_db, engine
 from models.models import Base
-from api import upload, ocr, medical, forgeries, claims, admin, pdf, auth
+from api import upload, ocr, medical, forgeries, claims, pdf, auth
 
 # 데이터베이스 테이블 생성
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AI 보험금 청구 시스템 API",
@@ -50,7 +50,6 @@ v1_router.include_router(ocr.router, tags=["🔍 OCR 처리"])
 v1_router.include_router(medical.router, tags=["🏥 의료 정보"])
 v1_router.include_router(forgeries.router, tags=["🔍 위조분석"])
 v1_router.include_router(claims.router, tags=["💰 청구"])
-v1_router.include_router(admin.router, tags=["👨‍💼 관리자"])
 v1_router.include_router(pdf.router, tags=["📄 PDF 처리"])
 
 # 메인 앱에 v1 라우터 등록

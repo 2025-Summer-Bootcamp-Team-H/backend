@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime, date
+from pydantic import BaseModel
 
 # User schemas
 class UserBase(BaseModel):
@@ -132,3 +133,8 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     user_id: Optional[int] = None 
+
+# 위조분석
+class ForgeryRequest(BaseModel):
+    diagnosis_id: int
+    receipt_id: int
