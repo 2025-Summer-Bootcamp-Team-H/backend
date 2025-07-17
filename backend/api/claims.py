@@ -18,6 +18,9 @@ class ClaimCreateRequest(BaseModel):
     diagnosis_id: int
     receipt_id: int
 
+class BulkDeleteRequest(BaseModel):
+    claim_ids: list[int]
+
 @router.post("/claims",
     summary="보험금 청구 생성",
     description="진단서와 영수증 정보를 바탕으로 보험금 청구를 생성하고 자동으로 보험금을 계산합니다. 담당자는 기본 직원(관리자)으로 설정됩니다.",
@@ -365,6 +368,59 @@ async def get_claim_details(claim_id: int, db: Session = Depends(get_db)):
         "clauses": clauses,
         "review_basis": review_basis
     }
+
+@router.delete("/claims/bulk",
+    summary="선택된 청구들 일괄 삭제",
+    description="체크박스로 선택된 청구들을 한 번에 삭제합니다.",
+    response_description="일괄 삭제 결과",
+    dependencies=[Depends(get_current_user)]
+)
+async def delete_selected_claims(
+    delete_data: BulkDeleteRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    선택된 청구들을 일괄 삭제
+    - 프론트엔드에서 체크박스로 선택한 청구 ID 리스트 받음
+    - 각 청구와 관련된 ClaimCalculation 데이터도 함께 삭제
+    """
+    try:
+        deleted_count = 0
+        failed_count = 0
+        failed_ids = []
+        
+        for claim_id in delete_data.claim_ids:
+            try:
+                # ClaimCalculation 먼저 삭제
+                db.query(ClaimCalculation).filter(ClaimCalculation.claim_id == claim_id).delete()
+                
+                # Claim 삭제
+                claim = db.query(Claim).filter(Claim.id == claim_id).first()
+                if claim:
+                    db.delete(claim)
+                    deleted_count += 1
+                else:
+                    failed_count += 1
+                    failed_ids.append(claim_id)
+                    
+            except Exception as e:
+                failed_count += 1
+                failed_ids.append(claim_id)
+                continue
+        
+        db.commit()
+        
+        return {
+            "message": f"일괄 삭제 완료: {deleted_count}개 성공, {failed_count}개 실패",
+            "deleted_count": deleted_count,
+            "failed_count": failed_count,
+            "failed_ids": failed_ids,
+            "total_requested": len(delete_data.claim_ids)
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"일괄 삭제 실패: {str(e)}")
 
 @router.delete("/claims/{claim_id}",
     summary="개별 청구 삭제",
