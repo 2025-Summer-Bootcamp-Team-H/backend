@@ -7,6 +7,7 @@ import os
 from models.database import get_db, engine
 from models.models import Base
 from api import upload, ocr, medical, forgeries, claims, pdf, auth
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # 데이터베이스 테이블 생성
 # Base.metadata.create_all(bind=engine)
@@ -64,6 +65,9 @@ async def root():
 async def health_check():
     from datetime import datetime
     return {"status": "healthy", "timestamp": datetime.utcnow()}
+
+# 아래 두 줄을 FastAPI 인스턴스 생성 후에 추가
+Instrumentator().instrument(app).expose(app)
 
 if __name__ == "__main__":
     import uvicorn
