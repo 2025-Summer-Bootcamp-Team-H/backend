@@ -5,6 +5,8 @@ services:
   postgres:
     image: postgres:15
     container_name: insurance_postgres_prod
+    env_file:
+      - env.prod
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -31,6 +33,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     volumes:
       - ./uploads:/app/uploads  # 로컬 파일 저장 지원
+      - ./tmp:/app/tmp
       - ./80bfb172efe0f64e9ff0e750033f49cdcfa0904f.json:/app/80bfb172efe0f64e9ff0e750033f49cdcfa0904f.json  # GCS 서비스 계정 키 파일
       # 프로덕션에서는 소스코드 볼륨 마운트 제거
       # - ./backend:/app
@@ -39,6 +42,7 @@ services:
     restart: unless-stopped
     networks:
       - insurance_network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     # 프로덕션에서는 Nginx를 통해서만 접근
     # ports:
     #   - "8000:8000"

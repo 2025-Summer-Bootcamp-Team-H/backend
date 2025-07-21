@@ -1,3 +1,5 @@
+import logging
+logging.basicConfig(level=logging.DEBUG)
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from models.schemas import ForgeryRequest
@@ -8,27 +10,49 @@ import requests
 import os
 import tempfile
 from services.storage_service import storage_service
+import uuid
+import traceback
 
 router = APIRouter()
+logger = logging.getLogger("forgery_debug")
 
 def download_file_to_temp(file_url: str) -> str:
     """파일을 임시 디렉토리에 다운로드하여 로컬 경로 반환"""
     try:
         if file_url.startswith('http'):
-            # S3 URL인 경우 다운로드
             response = requests.get(file_url)
             response.raise_for_status()
-            
-            # 임시 파일 생성
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_url)[1])
-            temp_file.write(response.content)
-            temp_file.close()
-            return temp_file.name
+            # 직접 경로로 파일 생성
+            temp_filename = f"/app/tmp/{uuid.uuid4().hex}.jpg"
+            with open(temp_filename, "wb") as f:
+                f.write(response.content)
+            logger.warning(f"임시 파일 생성: {temp_filename}, 존재 여부: {os.path.exists(temp_filename)}")
+            # 파일로도 남기기
+            try:
+                with open("/app/tmp/forgery_debug.log", "a", encoding="utf-8") as logf:
+                    logf.write(f"임시 파일 생성: {temp_filename}, 존재 여부: {os.path.exists(temp_filename)}\n")
+            except Exception as log_e:
+                pass
+            if not os.path.exists(temp_filename):
+                try:
+                    with open("/app/tmp/forgery_debug.log", "a", encoding="utf-8") as logf:
+                        logf.write(f"임시 파일 생성 실패: {temp_filename}\n")
+                except Exception as log_e:
+                    pass
+                raise HTTPException(status_code=500, detail=f"임시 파일 생성 실패: {temp_filename}")
+            return temp_filename
         else:
-            # 로컬 파일인 경우 경로 반환
             return os.path.join("./uploads", file_url)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"파일 다운로드 실패: {str(e)}")
+        logger.warning(f"임시 파일 생성/다운로드 except: {str(e)}")
+        logger.warning(traceback.format_exc())
+        # 파일로도 남기기
+        try:
+            with open("/app/tmp/forgery_debug.log", "a", encoding="utf-8") as logf:
+                logf.write(f"임시 파일 생성/다운로드 except: {str(e)}\n{traceback.format_exc()}\n")
+        except Exception as log_e:
+            pass
+        raise HTTPException(status_code=500, detail=f"파일 다운로드/임시파일 생성 실패: {str(e)}")
 
 @router.post(
     "/forgery_analysis",
@@ -47,7 +71,9 @@ def analyze_forgery(data: ForgeryRequest, db: Session = Depends(get_db)):
     try:
         # 파일을 임시 디렉토리에 다운로드
         diagnosis_temp_path = download_file_to_temp(diagnosis.image_url)
+        logger.warning(f"분석 시작(진단서): {diagnosis_temp_path}, 존재 여부: {os.path.exists(diagnosis_temp_path)}")
         receipt_temp_path = download_file_to_temp(receipt.image_url)
+        logger.warning(f"분석 시작(영수증): {receipt_temp_path}, 존재 여부: {os.path.exists(receipt_temp_path)}")
 
         # 각각 위조분석
         diagnosis_result = analyze_forgery_from_local_path(diagnosis_temp_path)
