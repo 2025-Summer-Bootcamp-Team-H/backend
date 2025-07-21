@@ -8,6 +8,25 @@ from models.database import get_db, engine
 from models.models import Base
 from api import upload, ocr, medical, forgeries, claims, pdf, auth
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
+from models.database import engine # SQLAlchemy engine 가져오기
+
+# OpenTelemetry 설정
+trace.set_tracer_provider(TracerProvider())
+tracer_provider = trace.get_tracer_provider()
+
+# OTLP Exporter 설정 (Jaeger로 데이터 전송)
+otlp_exporter = OTLPSpanExporter(
+    endpoint=os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://localhost:4318/v1/traces")
+)
+tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+
 # 데이터베이스 테이블 생성
 # Base.metadata.create_all(bind=engine)
 
@@ -54,6 +73,14 @@ v1_router.include_router(pdf.router, tags=["📄 PDF 처리"])
 
 # 메인 앱에 v1 라우터 등록
 app.include_router(v1_router)
+
+# FastAPI 애플리케이션 계측
+FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
+# SQLAlchemy 계측
+SQLAlchemyInstrumentor().instrument(engine=engine)
+# Psycopg2 계측
+Psycopg2Instrumentor().instrument()
+
 
 # 기본 라우트들
 @app.get("/")
