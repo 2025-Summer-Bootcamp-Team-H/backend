@@ -5,6 +5,7 @@ from models.models import MedicalDiagnosis, MedicalReceipt
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime, date
+import subprocess
 
 router = APIRouter()
 
@@ -237,4 +238,30 @@ async def get_receipt(receipt_id: int, db: Session = Depends(get_db)):
             "updated_at": str(receipt.updated_at),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"영수증 정보 조회 실패: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"영수증 정보 조회 실패: {str(e)}")
+
+@router.post("/dummy-data", summary="더미데이터 생성", description="DB에 더미데이터를 삽입합니다.")
+def create_dummy_data():
+    try:
+        result = subprocess.run(
+            ["python", "utils/scripts/create_final_dummy_data.py"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return {"message": "더미데이터 생성 완료", "output": result.stdout}
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"실패: {e.stderr}")
+
+@router.post("/init-database", summary="DB 초기화", description="DB를 완전히 초기화(모든 테이블 드랍 후 재생성)합니다.")
+def init_database():
+    try:
+        result = subprocess.run(
+            ["python", "utils/scripts/create_final_dummy_data.py", "--init-only"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return {"message": "DB 초기화 완료", "output": result.stdout}
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"실패: {e.stderr}") 

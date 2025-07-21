@@ -13,10 +13,12 @@ import json
 import random
 from datetime import datetime, date, timedelta
 from faker import Faker
+from pathlib import Path
 
 # Add the backend directory to the Python path for imports
-backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(backend_dir)
+current_dir = Path(__file__).parent
+backend_dir = current_dir.parent
+sys.path.append(str(backend_dir))
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -30,6 +32,29 @@ from utils.auth import get_password_hash
 # Database URL
 DATABASE_URL = "postgresql://postgres:postgres123@postgres:5432/insurance_system"
 
+def debug_environment():
+    """환경 정보 디버깅"""
+    print("🔍 Environment Debug Info:")
+    print(f"  Python version: {sys.version}")
+    print(f"  Platform: {sys.platform}")
+    print(f"  Current working directory: {os.getcwd()}")
+    print(f"  Script location: {__file__}")
+    print(f"  Backend directory: {backend_dir}")
+    
+    # 환경변수 확인
+    env_vars = ['LANG', 'LC_ALL', 'LC_CTYPE', 'PYTHONIOENCODING', 'PYTHONUTF8']
+    for var in env_vars:
+        value = os.getenv(var, 'Not set')
+        print(f"  {var}: {value}")
+    
+    # 파일 시스템 확인
+    try:
+        import locale
+        print(f"  Default locale: {locale.getdefaultlocale()}")
+        print(f"  Preferred locale: {locale.getpreferredencoding()}")
+    except Exception as e:
+        print(f"  Locale error: {e}")
+
 def init_database():
     """Initialize database with fresh schema"""
     print("🔄 Initializing database...")
@@ -42,26 +67,83 @@ def init_database():
     return engine
 
 def load_extracted_clauses():
-    """Load extracted insurance clauses from JSON files"""
+    debug_environment()
     clauses = []
-    
-    output_dir = os.path.join(backend_dir, "output_results")
+
+    # 여러 후보 경로를 순서대로 시도
+    candidate_dirs = [
+        Path(__file__).parent / "output_results",  # 기존 방식
+        Path(__file__).parent.parent / "output_results",  # backend/backend/output_results
+        Path("/app/backend/output_results"),  # 컨테이너 절대경로
+        Path("/app/output_results"),  # 컨테이너 절대경로(루트)
+    ]
+    output_dir = None
+    for cand in candidate_dirs:
+        if cand.exists():
+            output_dir = cand
+            break
+
+    if output_dir is None:
+        print("❌ output_results 폴더를 찾을 수 없습니다. 시도한 경로들:")
+        for cand in candidate_dirs:
+            print("  -", cand.resolve())
+        return clauses
+
+    print(f"✅ output_results 폴더 발견: {output_dir.resolve()}")
+
+    try:
+        dir_contents = list(output_dir.iterdir())
+        print(f"📁 Directory contents: {[str(f) for f in dir_contents]}")
+    except Exception as e:
+        print(f"❌ Error reading directory: {e}")
+        return clauses
+
     files = [
         "삼성생명_스마트보장보험_extracted_clauses.json",
-        "삼성생명_실손의료비보장보험_extracted_clauses.json", 
+        "삼성생명_실손의료비보장보험_extracted_clauses.json",
         "삼성생명_희망사랑보험_extracted_clauses.json"
     ]
-    
+
     for filename in files:
-        file_path = os.path.join(output_dir, filename)
+        file_path = output_dir / filename
+        print(f"🔍 Checking file: {file_path.resolve()}")
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                file_clauses = json.load(f)
+            if not file_path.exists():
+                print(f"⚠️ File not found: {filename}")
+                continue
+            file_size = file_path.stat().st_size
+            print(f"📊 File size: {file_size} bytes")
+            if file_size == 0:
+                print(f"⚠️ Empty file: {filename}")
+                continue
+            encodings = ['utf-8', 'utf-8-sig', 'cp949', 'euc-kr']
+            file_clauses = None
+            for encoding in encodings:
+                try:
+                    with file_path.open('r', encoding=encoding) as f:
+                        file_clauses = json.load(f)
+                        print(f"✅ Successfully loaded with {encoding} encoding")
+                        break
+                except UnicodeDecodeError:
+                    print(f"⚠️ Failed with {encoding} encoding, trying next...")
+                    continue
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ JSON decode error with {encoding}: {e}")
+                    continue
+            if file_clauses:
                 clauses.extend(file_clauses)
                 print(f"📄 Loaded {len(file_clauses)} clauses from {filename}")
+            else:
+                print(f"❌ Failed to load {filename} with any encoding")
+        except FileNotFoundError:
+            print(f"❌ File not found: {filename}")
         except Exception as e:
             print(f"❌ Error loading {filename}: {e}")
-    
+    print(f"📋 Total clauses loaded: {len(clauses)}")
+    if not clauses:
+        print("⚠️ No clauses loaded! Check if JSON files exist and are valid.")
+        print("💡 Make sure the files are in the correct directory and have valid JSON content.")
+        print("🔧 Try running the PDF processing first to generate the JSON files.")
     return clauses
 
 def create_users(db):
@@ -150,31 +232,32 @@ def create_insurance_data(db):
     
     clause_objects = []
     for clause_data in extracted_clauses:
-        # Determine product based on clause characteristics
-        if "실손" in clause_data.get("category", "") or "입원의료비" in clause_data.get("category", ""):
-            product_id = product_map["실손의료비보장보험"]
-        elif "암" in clause_data.get("clause_name", ""):
-            product_id = product_map["희망사랑보험"]
-        else:
-            product_id = product_map["스마트보장보험"]
-        
-        clause = InsuranceClause(
-            clause_code=clause_data["id"],
-            clause_name=clause_data["clause_name"],
-            product_id=product_id,
-            category=clause_data["category"],
-            unit_type=clause_data["unit_type"],
-            per_unit=clause_data["per_unit"],
-            max_total=clause_data["max_total"],
-            conditions=clause_data["condition"],
-            description=f"{clause_data['clause_name']} - {clause_data['condition']}"
-        )
-        clause_objects.append(clause)
-        db.add(clause)
-    
+        try:
+            print("🟢 inserting clause:", clause_data)
+            # Determine product based on clause characteristics
+            if "실손" in clause_data.get("category", "") or "입원의료비" in clause_data.get("category", ""):
+                product_id = product_map["실손의료비보장보험"]
+            elif "암" in clause_data.get("clause_name", ""):
+                product_id = product_map["희망사랑보험"]
+            else:
+                product_id = product_map["스마트보장보험"]
+            clause = InsuranceClause(
+                clause_code=clause_data["id"],
+                clause_name=clause_data["clause_name"],
+                product_id=product_id,
+                category=clause_data["category"],
+                unit_type=clause_data["unit_type"],
+                per_unit=clause_data["per_unit"],
+                max_total=clause_data["max_total"],
+                conditions=clause_data["condition"],
+                description=f"{clause_data['clause_name']} - {clause_data['condition']}"
+            )
+            clause_objects.append(clause)
+            db.add(clause)
+        except Exception as e:
+            print(f"❌ Error inserting clause: {clause_data} - {e}")
     db.commit()
     print(f"📋 Created {len(clause_objects)} insurance clauses from extracted data")
-    
     return clause_objects, products
 
 def match_diagnosis_to_clauses(diagnosis_name, treatment_type, admission_days, medical_cost):
@@ -640,4 +723,10 @@ def main():
         db.close()
 
 if __name__ == "__main__":
-    main() 
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--init-only":
+        # DB만 초기화
+        init_database()
+        print("✅ DB 스키마만 초기화 완료 (데이터 생성 없음)")
+    else:
+        main() 

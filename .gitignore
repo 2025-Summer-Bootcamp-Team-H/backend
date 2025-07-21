@@ -94,3 +94,6 @@ coverage.xml
 # Database dumps
 *.sql.gz
 *.dump 
+
+env.prod
+.env.prod

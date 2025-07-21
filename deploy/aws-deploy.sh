@@ -24,7 +24,14 @@ if ! command -v aws &> /dev/null; then
     exit 1
 fi
 
-# 2. ECR 리포지토리 생성
+# 2. 환경변수 파일 확인
+if [ ! -f "env.prod" ]; then
+    echo "❌ env.prod 파일이 없습니다."
+    echo "env.example을 복사하여 env.prod를 생성하세요."
+    exit 1
+fi
+
+# 3. ECR 리포지토리 생성
 echo "📦 ECR 리포지토리 생성 중..."
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${SERVICE_NAME}"
@@ -32,7 +39,7 @@ ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${SERVICE_NAME}"
 aws ecr describe-repositories --repository-names ${SERVICE_NAME} --region ${REGION} || \
 aws ecr create-repository --repository-name ${SERVICE_NAME} --region ${REGION}
 
-# 3. Docker 이미지 빌드 및 푸시
+# 4. Docker 이미지 빌드 및 푸시
 echo "🐳 Docker 이미지 빌드 및 푸시 중..."
 aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ECR_URI}
 
@@ -40,7 +47,7 @@ docker build -f backend/Dockerfile.prod -t ${SERVICE_NAME} ./backend
 docker tag ${SERVICE_NAME}:latest ${ECR_URI}:latest
 docker push ${ECR_URI}:latest
 
-# 4. VPC 및 보안 그룹 설정
+# 5. VPC 및 보안 그룹 설정
 echo "🌐 VPC 설정 중..."
 VPC_ID=$(aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query "Vpcs[0].VpcId" --output text --region ${REGION})
 SUBNET_IDS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${VPC_ID}" --query "Subnets[*].SubnetId" --output text --region ${REGION})
@@ -64,7 +71,7 @@ aws ec2 authorize-security-group-ingress \
     --cidr 0.0.0.0/0 \
     --region ${REGION} 2>/dev/null || true
 
-# 5. RDS 인스턴스 생성 (PostgreSQL)
+# 6. RDS 인스턴스 생성 (PostgreSQL)
 echo "🗄️ RDS 인스턴스 생성 중..."
 DB_INSTANCE_ID="insurance-postgres"
 DB_NAME="insurance_system"
@@ -103,8 +110,12 @@ DB_ENDPOINT=$(aws rds describe-db-instances \
     --query "DBInstances[0].Endpoint.Address" \
     --output text --region ${REGION})
 
-# 6. Systems Manager Parameter Store에 환경변수 저장
+# 7. Systems Manager Parameter Store에 환경변수 저장
 echo "🔐 Parameter Store에 환경변수 저장 중..."
+
+# env.prod 파일에서 환경변수 읽기
+source env.prod
+
 aws ssm put-parameter \
     --name "/insurance/db-password" \
     --value "${DB_PASSWORD}" \
@@ -113,24 +124,24 @@ aws ssm put-parameter \
 
 aws ssm put-parameter \
     --name "/insurance/openai-api-key" \
-    --value "your-openai-api-key-here" \
+    --value "${OPENAI_API_KEY}" \
     --type "SecureString" \
     --region ${REGION} --overwrite
 
 aws ssm put-parameter \
     --name "/insurance/jwt-secret-key" \
-    --value "$(openssl rand -base64 32)" \
+    --value "${JWT_SECRET_KEY}" \
     --type "SecureString" \
     --region ${REGION} --overwrite
 
-# 7. ECS 클러스터 생성
+# 8. ECS 클러스터 생성
 echo "🏗️ ECS 클러스터 생성 중..."
 aws ecs create-cluster \
     --cluster-name ${CLUSTER_NAME} \
     --capacity-providers FARGATE \
     --region ${REGION} 2>/dev/null || true
 
-# 8. 태스크 정의 생성
+# 9. 태스크 정의 생성
 echo "📋 ECS 태스크 정의 생성 중..."
 cat > task-definition.json << EOF
 {
@@ -158,6 +169,14 @@ cat > task-definition.json << EOF
                 {
                     "name": "ENVIRONMENT",
                     "value": "production"
+                },
+                {
+                    "name": "FRONTEND_URL",
+                    "value": "${FRONTEND_URL:-https://your-domain.com}"
+                },
+                {
+                    "name": "ALLOWED_ORIGINS",
+                    "value": "${ALLOWED_ORIGINS:-https://your-domain.com}"
                 }
             ],
             "secrets": [
@@ -187,7 +206,7 @@ aws ecs register-task-definition \
     --cli-input-json file://task-definition.json \
     --region ${REGION}
 
-# 9. ECS 서비스 생성
+# 10. ECS 서비스 생성
 echo "🚀 ECS 서비스 생성 중..."
 aws ecs create-service \
     --cluster ${CLUSTER_NAME} \
@@ -198,7 +217,7 @@ aws ecs create-service \
     --network-configuration "awsvpcConfiguration={subnets=[${SUBNET_IDS// /,}],securityGroups=[${SG_ID}],assignPublicIp=ENABLED}" \
     --region ${REGION} 2>/dev/null || true
 
-# 10. Application Load Balancer 생성
+# 11. Application Load Balancer 생성
 echo "⚖️ Application Load Balancer 생성 중..."
 ALB_ARN=$(aws elbv2 create-load-balancer \
     --name insurance-alb \
@@ -210,7 +229,7 @@ ALB_ARN=$(aws elbv2 create-load-balancer \
     --names insurance-alb \
     --query 'LoadBalancers[0].LoadBalancerArn' --output text --region ${REGION})
 
-# 11. 배포 완료 정보 출력
+# 12. 배포 완료 정보 출력
 ALB_DNS=$(aws elbv2 describe-load-balancers \
     --load-balancer-arns ${ALB_ARN} \
     --query 'LoadBalancers[0].DNSName' --output text --region ${REGION})
@@ -220,14 +239,15 @@ echo "🎉 AWS 배포 완료!"
 echo "로드밸런서 URL: http://${ALB_DNS}"
 echo "API 문서: http://${ALB_DNS}/docs"
 echo "헬스체크: http://${ALB_DNS}/health"
+echo "설정 확인: http://${ALB_DNS}/config"
 echo ""
 echo "📋 중요 정보:"
 echo "- RDS 엔드포인트: ${DB_ENDPOINT}"
 echo "- 데이터베이스 비밀번호: ${DB_PASSWORD}"
-echo "- OpenAI API 키는 Parameter Store에서 수정하세요"
+echo "- 환경변수는 Parameter Store에서 관리됩니다"
 echo ""
 echo "🔧 다음 단계:"
-echo "1. Parameter Store에서 OpenAI API 키 업데이트"
+echo "1. env.prod 파일에서 FRONTEND_URL과 ALLOWED_ORIGINS 설정"
 echo "2. 데이터베이스 스키마 초기화"
 echo "3. 더미 데이터 생성"
 echo "4. Route 53에서 도메인 설정"

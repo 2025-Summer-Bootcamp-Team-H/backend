@@ -14,10 +14,14 @@ from dotenv import load_dotenv
 # 환경변수 로드
 load_dotenv()
 
-# JWT 설정
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-here-change-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24시간
+# JWT 설정 - 환경변수에서 가져오기
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+# 필수 환경변수 검증
+if not SECRET_KEY:
+    raise ValueError("JWT_SECRET_KEY 환경변수가 설정되지 않았습니다.")
 
 # 비밀번호 해싱
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
