@@ -1,5 +1,11 @@
 FROM python:3.11-slim
 
+# 로케일 설정 추가 (한글 파일명 지원)
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV PYTHONIOENCODING=utf-8
+ENV PYTHONUTF8=1
+
 WORKDIR /app
 
 # 시스템 패키지 설치 (PDF 처리용 추가)
@@ -9,7 +15,15 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     tesseract-ocr \
     tesseract-ocr-kor \
+    locales \
     && rm -rf /var/lib/apt/lists/*
+
+# 로케일 생성 (한글 지원)
+RUN locale-gen ko_KR.UTF-8
+RUN locale-gen en_US.UTF-8
+ENV LANG=ko_KR.UTF-8
+ENV LC_ALL=ko_KR.UTF-8
+ENV LC_CTYPE=ko_KR.UTF-8
 
 # Python 의존성 설치
 COPY requirements.txt .

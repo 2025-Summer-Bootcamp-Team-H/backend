@@ -1,285 +1,183 @@
-# 보험금 청구 시스템
+# AI 보험금 청구 시스템
 
-AI 기반 보험금 청구 처리 시스템입니다. 진단서와 영수증 이미지를 업로드하여 OCR 처리 후, AI를 통해 보험금을 자동으로 계산하고 위조분석을 수행합니다.
+AI 기반 보험금 청구 처리 시스템 - PDF에서 보험 조항을 추출하고 진단서를 분석하여 자동으로 보험금을 계산합니다.
 
-## 🏗️ 프로젝트 구조
-
-```
-backend_1/
-├── backend/                    # FastAPI 백엔드
-│   ├── api/                   # API 엔드포인트
-│   │   ├── auth.py           # 인증 관련 API
-│   │   ├── upload.py         # 이미지 업로드 API
-│   │   ├── ocr.py            # OCR 처리 API
-│   │   ├── medical.py        # 진단서/영수증 정보 API
-│   │   ├── forgeries.py      # 위조분석 API
-│   │   ├── claims.py         # 보험금 청구 API
-│   │   ├── admin.py          # 관리자 API
-│   │   └── pdf.py            # PDF 처리 API
-│   ├── models/               # 데이터베이스 모델
-│   │   ├── models.py         # SQLAlchemy 모델
-│   │   ├── database.py       # DB 연결 설정
-│   │   └── schemas.py        # Pydantic 스키마
-│   ├── services/             # 비즈니스 로직
-│   │   ├── claim_calculator.py  # 보험금 계산
-│   │   ├── pdf_processor.py     # PDF 처리
-│   │   └── ai_config.py         # AI 설정
-│   ├── utils/                # 유틸리티
-│   │   ├── scripts/          # 스크립트
-│   │   └── sql/              # SQL 파일
-│   ├── input_pdfs/           # 입력 PDF 파일
-│   ├── output_results/       # 출력 결과
-│   ├── uploads/              # 업로드 파일
-│   └── main.py               # FastAPI 앱
-├── docs/                     # 문서
-│   └── API_ENDPOINTS.md      # API 명세서
-├── nginx/                    # Nginx 설정
-├── docker-compose.yml        # 개발용 Docker Compose
-├── docker-compose.prod.yml   # 운영용 Docker Compose
-└── README.md                 # 프로젝트 가이드
-```
+---
 
 ## 🚀 빠른 시작
 
-### 1. 환경 설정
-
-#### 필수 요구사항
-- Docker & Docker Compose
-- Python 3.11 (로컬 개발시)
-
-#### 환경변수 설정 (.env)
+### 로컬 개발 환경
 ```bash
-# 데이터베이스
-POSTGRES_DB=insurance_db
-POSTGRES_USER=insurance_user
-POSTGRES_PASSWORD=your_password
+# 1. 환경변수 설정
+cp env.example .env
+# .env 파일에서 실제 API 키 등으로 수정
 
-# JWT 인증
-JWT_SECRET_KEY=your_secret_key
-JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+# 2. Docker Compose 실행
+docker-compose up -d --build
 
-# AI API 키
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
+# 3. 더미데이터 생성 (필요시)
+docker exec -it insurance_backend python utils/scripts/create_final_dummy_data.py
 
-# pgAdmin
-PGADMIN_PASSWORD=admin123
+# 4. API 테스트
+curl http://localhost:8000/health
 ```
 
-### 2. 개발 환경 실행
-
+### 프로덕션 배포
 ```bash
-# 컨테이너 시작
-docker-compose up -d
+# 1. 서버에서 프로덕션 환경변수 설정
+cp env.example env.prod
+# env.prod 파일에서 실제 값들로 수정 (API 키, DB 비번 등)
 
-# 로그 확인
-docker-compose logs -f backend
+# 2. 프로덕션 모드로 실행
+docker-compose -f docker-compose.prod.yml up -d --build
 ```
 
-### 3. 접속 정보
+> ⚠️ **env.prod, .env.prod 등 실제 환경변수 파일은 git에 올리지 마세요!**
+> (이미 .gitignore에 추가되어 있습니다)
 
-- **FastAPI Swagger UI**: http://localhost:8000/docs
+---
+
+## 📁 프로젝트 구조
+
+```
+backend/
+├── .env                    # 로컬 개발용 환경변수 (git에 올리지 마세요)
+├── env.prod                # 프로덕션용 환경변수 (git에 올리지 마세요)
+├── env.example             # 환경변수 템플릿
+├── docker-compose.yml      # 로컬 개발용 Docker 설정
+├── docker-compose.prod.yml # 프로덕션용 Docker 설정
+├── backend/                # 소스코드
+│   ├── main.py             # FastAPI 앱
+│   ├── api/                # API 라우터들
+│   ├── models/             # 데이터베이스 모델
+│   ├── services/           # 비즈니스 로직
+│   ├── utils/              # 유틸리티/스크립트
+│   └── ...
+├── deploy/                 # 배포 스크립트
+├── nginx/                  # Nginx 설정
+└── uploads/                # 업로드 파일 저장소 (로컬 개발용)
+```
+
+---
+
+## 🏗️ 개발/배포 워크플로우
+
+### 로컬 개발
+1. 코드 수정: `backend/` 폴더 내 파일 수정
+2. 실시간 반영: 볼륨 마운트로 코드 변경 즉시 반영
+3. 테스트: Swagger UI(/docs) 또는 curl/Postman 등 활용
+4. 커밋: `git add . && git commit -m "메시지"`
+
+### 프로덕션 배포
+1. 코드 푸시: `git push origin main`
+2. 서버에서 풀: `git pull origin main`
+3. 프로덕션 실행: `docker-compose -f docker-compose.prod.yml up -d --build`
+
+---
+
+## 🌐 주요 접속 정보
+
+### 로컬 개발 환경
+- **API 서버**: http://localhost:8000
+- **Swagger 문서**: http://localhost:8000/docs
 - **pgAdmin**: http://localhost:8080 (admin@insurance.com / admin123)
 - **Nginx**: http://localhost:80
 
-## 📚 API 문서
-
-### 주요 API 엔드포인트
-
-#### 인증
-- `POST /users/signup` - 회원가입
-- `POST /users/login` - 로그인
-- `GET /users/me` - 내 정보 조회
-
-#### 이미지 업로드
-- `POST /diagnoses/images` - 진단서 업로드
-- `POST /receipts/images` - 영수증 업로드
-
-#### OCR 처리
-- `PATCH /diagnoses/ocr/{diagnosis_id}` - 진단서 OCR
-- `PATCH /receipts/ocr/{receipt_id}` - 영수증 OCR
-
-#### 보험금 청구
-- `POST /claim/{diagnosis_id}/{receipt_id}` - 청구 생성
-- `GET /claims` - 청구 목록 조회
-- `GET /claims/{claim_id}` - 청구 상세 조회
-
-#### 위조분석
-- `POST /diagnoses/forgeries/{diagnosis_id}` - 진단서 위조분석
-- `POST /receipts/forgeries/{receipt_id}` - 영수증 위조분석
-
-#### PDF 처리
-- `POST /users/pdf/process` - PDF 보험조항 추출
-
-**전체 API 명세**: [docs/API_ENDPOINTS.md](docs/API_ENDPOINTS.md)
-
-## 🗄️ 데이터베이스
-
-### 주요 테이블
-
-- **users**: 보험사 직원 정보
-- **medical_diagnoses**: 진단서 정보
-- **medical_receipts**: 영수증 정보
-- **claims**: 보험금 청구 정보
-- **claim_calculations**: 보험금 계산 결과
-- **insurance_clauses**: 보험 조항 정보
-- **user_contracts**: 계약 정보
-- **user_subscriptions**: 가입 특약 정보
-- **forgery_analysis**: 위조분석 결과
-
-### DB 마이그레이션
-
-```bash
-# 마이그레이션 실행
-docker-compose exec backend alembic upgrade head
-
-# 더미 데이터 생성
-docker-compose exec backend python utils/scripts/create_final_dummy_data.py
-```
-
-## 🔧 개발 가이드
-
-### 로컬 개발 환경
-
-```bash
-# 가상환경 생성
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 의존성 설치
-pip install -r backend/requirements.txt
-
-# 환경변수 설정
-cp .env.example .env
-# .env 파일 수정
-
-# 로컬 실행
-cd backend
-uvicorn main:app --reload
-```
-
-### 컨테이너 관리
-
-```bash
-# 컨테이너 시작
-docker-compose up -d
-
-# 컨테이너 중지
-docker-compose down
-
-# 로그 확인
-docker-compose logs -f [service_name]
-
-# 컨테이너 재빌드
-docker-compose build --no-cache
-```
-
-### 테스트
-
-```bash
-# 테스트 실행
-docker-compose exec backend pytest
-
-# 특정 테스트 실행
-docker-compose exec backend pytest tests/test_auth.py
-```
-
-## 🚀 운영 배포
-
 ### 프로덕션 환경
+- **API 서버**: https://your-domain.com
+- **Swagger 문서**: https://your-domain.com/docs
+- **Nginx**: https://your-domain.com (SSL)
 
+---
+
+## 🖼️ 이미지 반환 API
+- 진단서 이미지: `GET /api/v1/images/diagnosis/{diagnosis_id}`
+- 영수증 이미지: `GET /api/v1/images/receipt/{receipt_id}`
+  - PK만 알면 프론트에서 `<img src="...">`로 바로 사용 가능
+  - 클라우드 스토리지/로컬 모두 자동 지원
+
+---
+
+## 📚 주요 API 엔드포인트
+- 보험금 청구 생성: `POST /api/v1/claims`
+- 청구 목록 조회: `GET /api/v1/claims`
+- 청구 상세 조회: `GET /api/v1/claims/{claim_id}`
+- 진단서/영수증 업로드: `POST /api/v1/upload/diagnoses`, `POST /api/v1/upload/receipts`
+- 진단서/영수증 정보 조회: `GET /api/v1/diagnoses/{diagnosis_id}`, `GET /api/v1/receipts/{receipt_id}`
+- OCR 처리: `PATCH /api/v1/ocr/diagnoses/{diagnosis_id}`, `PATCH /api/v1/ocr/receipts/{receipt_id}`
+- 위조분석: `POST /api/v1/forgery_analysis`
+
+---
+
+## 🛠️ 유용한 명령어
+
+### 로컬 개발
 ```bash
-# 운영용 컨테이너 시작
+# 서비스 시작
+docker-compose up -d
+# 서비스 중지
+docker-compose down
+# 로그 확인
+docker-compose logs -f backend
+# 설정 확인
+curl http://localhost:8000/config
+# 더미 데이터 생성
+curl -X POST http://localhost:8000/api/v1/dummy-data
+```
+
+### 프로덕션
+```bash
+# 프로덕션 실행
 docker-compose -f docker-compose.prod.yml up -d
-
-# SSL 인증서 설정
-# nginx/ssl/ 폴더에 인증서 파일 배치
+# 프로덕션 중지
+docker-compose -f docker-compose.prod.yml down
+# 프로덕션 로그 확인
+docker-compose -f docker-compose.prod.yml logs -f backend
 ```
 
-### 환경변수 (운영)
+---
 
-```bash
-# 운영용 환경변수
-ENVIRONMENT=production
-DATABASE_URL=postgresql://user:pass@host:5432/db
-OPENAI_API_KEY=your_key
-ANTHROPIC_API_KEY=your_key
-JWT_SECRET_KEY=your_secret
-```
+## 🧩 환경변수 관리
+- `.env` (로컬), `env.prod` (운영) 파일은 **절대 git에 올리지 마세요!**
+- 템플릿(`env.example`)만 커밋
+- 실제 값은 서버/로컬에만 보관
 
-## 📁 주요 폴더 설명
+---
 
-### backend/
-- **api/**: REST API 엔드포인트
-- **models/**: 데이터베이스 모델 및 스키마
-- **services/**: 비즈니스 로직 (보험금 계산, AI 처리 등)
-- **utils/**: 유틸리티 스크립트 및 SQL 파일
+## 🚨 문제 해결
 
-### uploads/
-- **diagnosis/**: 업로드된 진단서 이미지
-- **receipts/**: 업로드된 영수증 이미지
-
-### input_pdfs/
-- 테스트용 보험 약관 PDF 파일들
-
-### output_results/
-- PDF 처리 결과 및 추출된 보험 조항
-
-## 🔍 문제 해결
-
-### 일반적인 문제
-
-1. **포트 충돌**
-   ```bash
-   # 사용 중인 포트 확인
-   netstat -ano | findstr :8000
-   
-   # docker-compose.yml에서 포트 변경
-   ports:
-     - "8001:8000"  # 8000 → 8001
-   ```
-
-2. **데이터베이스 연결 실패**
-   ```bash
-   # DB 컨테이너 상태 확인
-   docker-compose ps postgres
-   
-   # DB 로그 확인
-   docker-compose logs postgres
-   ```
-
-3. **AI API 키 오류**
-   ```bash
-   # 환경변수 확인
-   docker-compose exec backend env | grep API_KEY
-   ```
+### 일반적인 문제들
+1. **포트 충돌**: `lsof -i :8000`으로 확인
+2. **환경변수 오류**: `.env`/`env.prod` 파일 확인
+3. **DB 연결 오류**: PostgreSQL 컨테이너 상태 확인
+4. **한글 파일명 문제**: 로케일/컨테이너 설정 확인
+5. **경로 문제**: output_results, uploads 등 경로 자동 탐색 코드 적용
 
 ### 로그 확인
-
 ```bash
-# 백엔드 로그
+# Backend 로그
 docker-compose logs -f backend
-
-# 데이터베이스 로그
+# PostgreSQL 로그
 docker-compose logs -f postgres
-
 # Nginx 로그
 docker-compose logs -f nginx
 ```
 
-## 🤝 기여 가이드
+---
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+## ✅ 배포 체크리스트
+- [ ] 불필요한 파일/폴더 삭제 (api_backup, 테스트/더미/실험 코드 등)
+- [ ] 민감정보 커밋 금지 (.env, env.prod 등)
+- [ ] README/가이드 최신화
+- [ ] .gitignore 재확인
+- [ ] main.py, requirements.txt, docker-compose.yml 등 핵심 파일 최신화
+- [ ] 서버/로컬 모두 정상 동작 확인
 
-## 📄 라이선스
+---
 
-이 프로젝트는 MIT 라이선스 하에 배포됩니다.
-
-## 📞 문의
-
-프로젝트 관련 문의사항이 있으시면 이슈를 생성해 주세요. 
+## 🤝 기여하기
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request 

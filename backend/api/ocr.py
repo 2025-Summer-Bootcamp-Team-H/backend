@@ -11,15 +11,20 @@ from urllib.parse import urlparse
 import json
 import base64
 import re
+import requests
+from services.storage_service import storage_service
 
 router = APIRouter()
 
 # OpenAI API 키 환경변수에서 불러오기
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다.")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# 컨테이너 내부 기준 업로드 디렉토리
-UPLOAD_DIR = "/app/uploads"
+# 환경변수에서 업로드 디렉토리 설정
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
 
 # Pydantic 모델들 (기존 기능 유지)
 class DiagnosisUpdate(BaseModel):
@@ -89,17 +94,26 @@ async def ocr_diagnosis(diagnosis_id: int, db: Session = Depends(get_db)):
         # 2. 이미지 파일 경로
         if not diagnosis.image_url:
             raise HTTPException(status_code=400, detail="진단서 이미지가 업로드되지 않았습니다.")
-            
-        filename = os.path.basename(urlparse(str(diagnosis.image_url)).path)
-        file_path = os.path.join(UPLOAD_DIR, "diagnosis", filename)
         
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
+        # 스토리지 서비스를 사용하여 파일 읽기
+        try:
+            if diagnosis.image_url.startswith('http'):
+                # S3 URL인 경우
+                response = requests.get(diagnosis.image_url)
+                response.raise_for_status()
+                image_data = response.content
+            else:
+                # 로컬 파일인 경우
+                file_path = os.path.join(UPLOAD_DIR, "diagnosis", os.path.basename(diagnosis.image_url))
+                if not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
+                with open(file_path, 'rb') as f:
+                    image_data = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"이미지 파일 읽기 실패: {str(e)}")
 
         # 3. 이미지 base64 인코딩 및 GPT 호출
-        with open(file_path, "rb") as image_file:
-            image_bytes = image_file.read()
-            image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
 
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -206,17 +220,26 @@ async def ocr_receipt(receipt_id: int, db: Session = Depends(get_db)):
         # 2. 이미지 파일 경로 파싱
         if not receipt.image_url:
             raise HTTPException(status_code=400, detail="영수증 이미지가 업로드되지 않았습니다.")
-            
-        filename = os.path.basename(urlparse(str(receipt.image_url)).path)
-        file_path = os.path.join(UPLOAD_DIR, "receipts", filename)
-
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
+        
+        # 스토리지 서비스를 사용하여 파일 읽기
+        try:
+            if receipt.image_url.startswith('http'):
+                # S3 URL인 경우
+                response = requests.get(receipt.image_url)
+                response.raise_for_status()
+                image_data = response.content
+            else:
+                # 로컬 파일인 경우
+                file_path = os.path.join(UPLOAD_DIR, "receipts", os.path.basename(receipt.image_url))
+                if not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
+                with open(file_path, 'rb') as f:
+                    image_data = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"이미지 파일 읽기 실패: {str(e)}")
 
         # 3. 이미지 base64 인코딩
-        with open(file_path, "rb") as image_file:
-            image_bytes = image_file.read()
-            image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
 
         # 4. GPT Vision API 호출
         response = client.chat.completions.create(

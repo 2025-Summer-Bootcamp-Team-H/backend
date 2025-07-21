@@ -159,8 +159,8 @@ async def create_claim(
     dependencies=[Depends(get_current_user)]
 )
 async def get_claims(db: Session = Depends(get_db)):
-    # All claims (passed + failed)
-    claims = db.query(Claim).all()
+    # All claims (passed + failed), 최신순 정렬
+    claims = db.query(Claim).order_by(Claim.created_at.desc()).all()
     results = []
     for claim in claims:
         # 진단명 조인
@@ -169,16 +169,12 @@ async def get_claims(db: Session = Depends(get_db)):
         # 담당자명 조인
         user = db.query(User).filter(User.id == claim.user_id).first()
         user_name = user.name if user else None
-        
         # status 업데이트: claim_amount > 0이면 "passed", 0이면 "failed"
         if claim.claim_amount > 0:
             claim.status = "passed"
         else:
             claim.status = "failed"
-        
-        # DB에 status 업데이트 저장
         db.commit()
-        
         results.append({
             "claim_id": claim.id,
             "patient_name": claim.patient_name,
@@ -188,7 +184,7 @@ async def get_claims(db: Session = Depends(get_db)):
             "user_name": user_name,
             "status": claim.status
         })
-    return results 
+    return results
 
 def mask_ssn(ssn: str) -> str:
     if ssn and len(ssn) >= 8:
@@ -211,7 +207,8 @@ async def search_claims_by_patient_name(
         query = query.filter(Claim.patient_name == patient_name)
     if status:
         query = query.filter(Claim.status == status)
-    claims = query.all()
+    # 최신순 정렬 추가
+    claims = query.order_by(Claim.created_at.desc()).all()
     results = []
     for claim in claims:
         diagnosis = db.query(MedicalDiagnosis).filter(MedicalDiagnosis.id == claim.diagnosis_id).first()

@@ -6,13 +6,16 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from models.database import get_db
 from models.models import MedicalDiagnosis, MedicalReceipt
+from services.storage_service import storage_service
 
 router = APIRouter()
-#경로지정
-UPLOAD_DIR = "./uploads"
+
+# 환경변수에서 업로드 디렉토리 설정
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
 DIAGNOSIS_DIR = os.path.join(UPLOAD_DIR, "diagnosis")
 RECEIPT_DIR = os.path.join(UPLOAD_DIR, "receipts")
 
+# 디렉토리 생성 (로컬 스토리지용)
 os.makedirs(DIAGNOSIS_DIR, exist_ok=True)
 os.makedirs(RECEIPT_DIR, exist_ok=True)
 
@@ -27,7 +30,7 @@ async def upload_diagnosis(
     db: Session = Depends(get_db)
 ):
     try:
-        ALLOWED_EXTENSIONS = {"jpg"}
+        ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
         if not file.filename:
             raise HTTPException(status_code=400, detail="파일 이름이 없습니다.")
         ext = file.filename.split(".")[-1].lower()
@@ -36,13 +39,9 @@ async def upload_diagnosis(
 
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         filename = f"diagnosis_{timestamp}.{ext}"
-        diagnosis_dir = DIAGNOSIS_DIR
-        #diagnosis_dir = os.path.join(UPLOAD_DIR, "diagnosis")
-        os.makedirs(diagnosis_dir, exist_ok=True)
-        file_path = os.path.join(diagnosis_dir, filename)
-
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        
+        # 스토리지 서비스를 사용하여 파일 업로드
+        file_url = await storage_service.upload_file(file, "diagnosis", filename)
 
         diagnosis = MedicalDiagnosis(
             user_id=1,
@@ -55,13 +54,13 @@ async def upload_diagnosis(
             doctor_name="",
             icd_code="",
             admission_days=0,
-            image_url = f"uploads/diagnosis/{filename}"  #위조 분석 경로 받아오기 위해 수정
+            image_url = file_url  # 스토리지 서비스에서 반환된 URL 사용
         )
         db.add(diagnosis)
         db.commit()
         db.refresh(diagnosis)
 
-        return {"message": "진단서 업로드 성공", "diagnosis_id": diagnosis.id}
+        return {"message": "진단서 업로드 성공", "diagnosis_id": diagnosis.id, "file_url": file_url}
 
     except SQLAlchemyError as e:
         db.rollback()
@@ -80,7 +79,7 @@ async def upload_receipt(
     db: Session = Depends(get_db)
 ):
     try:
-        ALLOWED_EXTENSIONS = {"jpg"}
+        ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
         if not file.filename:
             raise HTTPException(status_code=400, detail="파일 이름이 없습니다.")
         ext = file.filename.split(".")[-1].lower()
@@ -89,14 +88,9 @@ async def upload_receipt(
 
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         filename = f"receipt_{timestamp}.{ext}"
-        receipt_dir = RECEIPT_DIR
-        #receipt_dir = os.path.join(UPLOAD_DIR, "receipts")
-        os.makedirs(receipt_dir, exist_ok=True)
-        file_path = os.path.join(receipt_dir, filename)
-
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
+        
+        # 스토리지 서비스를 사용하여 파일 업로드
+        file_url = await storage_service.upload_file(file, "receipts", filename)
 
         receipt = MedicalReceipt(
             user_id=1,
@@ -105,15 +99,14 @@ async def upload_receipt(
             total_amount=0,
             hospital_name="",
             treatment_details="",
-            image_url = f"uploads/receipts/{filename}" #위조 분석 경로 받아오기 위해 수정
-
+            image_url = file_url  # 스토리지 서비스에서 반환된 URL 사용
         )
 
         db.add(receipt)
         db.commit()
         db.refresh(receipt)
 
-        return {"message": "영수증 업로드 성공", "receipt_id": receipt.id}
+        return {"message": "영수증 업로드 성공", "receipt_id": receipt.id, "file_url": file_url}
 
     except SQLAlchemyError as e:
         db.rollback()

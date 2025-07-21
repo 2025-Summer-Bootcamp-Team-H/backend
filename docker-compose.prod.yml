@@ -19,24 +19,19 @@ services:
     # ports:
     #   - "5432:5432"
 
-
-
   # 백엔드 API (FastAPI) - 프로덕션 설정
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
     container_name: insurance_backend_prod
+    env_file:
+      - env.prod
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - JWT_ALGORITHM=${JWT_ALGORITHM}
-      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
-      - ENVIRONMENT=production
     volumes:
-      - ./uploads:/app/uploads
+      - ./uploads:/app/uploads  # 로컬 파일 저장 지원
+      - ./80bfb172efe0f64e9ff0e750033f49cdcfa0904f.json:/app/80bfb172efe0f64e9ff0e750033f49cdcfa0904f.json  # GCS 서비스 계정 키 파일
       # 프로덕션에서는 소스코드 볼륨 마운트 제거
       # - ./backend:/app
     depends_on:
