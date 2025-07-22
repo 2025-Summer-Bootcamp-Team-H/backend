@@ -30,6 +30,14 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+      - OTEL_SERVICE_NAME=insurance_backend
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://jaeger:4318/v1/traces
+
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
@@ -38,6 +46,20 @@ services:
     restart: unless-stopped
     networks:
       - insurance_network
+
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
+    networks:
+      - insurance_network
+
 
   # pgAdmin (데이터베이스 관리)
   pgadmin:
@@ -133,6 +155,24 @@ services:
       - postgres
     networks:
       - insurance_network
+
+
+  locust:
+    image: locustio/locust
+    container_name: locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./backend/locustfile.py:/mnt/locust/locustfile.py
+    working_dir: /mnt/locust
+    command: >
+      -f locustfile.py
+      --host http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - insurance_network
+
 
 volumes:
   postgres_data:
