@@ -156,6 +156,7 @@ services:
     networks:
       - insurance_network
 
+
   locust:
     image: locustio/locust
     container_name: locust
@@ -171,6 +172,7 @@ services:
       - backend
     networks:
       - insurance_network
+
 
 volumes:
   postgres_data:

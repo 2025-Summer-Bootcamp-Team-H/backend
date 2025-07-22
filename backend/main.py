@@ -3,10 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Optional
 import os
-
 from models.database import get_db, engine
 from models.models import Base
+from prometheus_fastapi_instrumentator import Instrumentator
 from api import upload, ocr, medical, forgeries, claims, pdf, auth, image
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
 
 # 필수 환경변수 검증
 def validate_environment():
@@ -32,6 +39,7 @@ except ValueError as e:
     print("💡 .env 파일을 확인하고 필수 환경변수를 설정하세요.")
     raise
 
+
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -50,6 +58,7 @@ otlp_exporter = OTLPSpanExporter(
     endpoint=os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://localhost:4318/v1/traces")
 )
 tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+
 
 # 데이터베이스 테이블 생성
 # Base.metadata.create_all(bind=engine)
@@ -137,6 +146,9 @@ async def health_check():
     from datetime import datetime
     return {"status": "healthy", "timestamp": datetime.utcnow()}
 
+
+# 아래 두 줄을 FastAPI 인스턴스 생성 후에 추가
+Instrumentator().instrument(app).expose(app)
 @app.get("/config")
 async def get_config():
     """환경 설정 정보를 반환합니다 (디버깅용)"""
@@ -150,6 +162,7 @@ async def get_config():
         "openai_api_key_set": bool(os.getenv("OPENAI_API_KEY")),
         "jwt_secret_set": bool(os.getenv("JWT_SECRET_KEY")),
     }
+
 
 if __name__ == "__main__":
     import uvicorn
