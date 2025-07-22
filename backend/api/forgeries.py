@@ -42,7 +42,14 @@ def download_file_to_temp(file_url: str) -> str:
                 raise HTTPException(status_code=500, detail=f"임시 파일 생성 실패: {temp_filename}")
             return temp_filename
         else:
-            return os.path.join("./uploads", file_url)
+            # 이미 uploads/로 시작하면 중복 방지, 아니면 uploads/를 붙임
+            if file_url.startswith("uploads/"):
+                rel_path = file_url
+            else:
+                rel_path = os.path.join("uploads", file_url)
+            # 항상 프로젝트 루트(backend/) 기준으로 경로 생성
+            abs_path = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), rel_path))
+            return abs_path
     except Exception as e:
         logger.warning(f"임시 파일 생성/다운로드 except: {str(e)}")
         logger.warning(traceback.format_exc())
