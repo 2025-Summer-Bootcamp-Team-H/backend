@@ -92,10 +92,8 @@ async def ocr_diagnosis(diagnosis_id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="진단서를 찾을 수 없습니다.")
 
         # 2. 이미지 파일 경로
-         Feat/18-monitoring
 
         if not diagnosis.image_url:
-          main
             raise HTTPException(status_code=400, detail="진단서 이미지가 업로드되지 않았습니다.")
         
         # 스토리지 서비스를 사용하여 파일 읽기
@@ -221,9 +219,7 @@ async def ocr_receipt(receipt_id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="영수증을 찾을 수 없습니다.")
 
         # 2. 이미지 파일 경로 파싱
-        Feat/18-monitoring
         if not receipt.image_url:
-        main
             raise HTTPException(status_code=400, detail="영수증 이미지가 업로드되지 않았습니다.")
         
         # 스토리지 서비스를 사용하여 파일 읽기
