@@ -1,0 +1,38 @@
+groups:
+- name: api-and-container-alerts
+  rules:
+  - alert: API5xxError
+    expr: increase(http_server_requests_total{status=~"5.."}[1m]) > 0
+    for: 0m
+    labels:
+      severity: critical
+    annotations:
+      summary: "API 5xx 에러 발생"
+      description: "최근 1분 내 5xx 에러가 1회 이상 발생했습니다."
+
+  - alert: ContainerDown
+    expr: up{job="fastapi"} == 0
+    for: 5s
+    labels:
+      severity: critical
+    annotations:
+      summary: "컨테이너 다운"
+      description: "backend 컨테이너가 5초 이상 다운 상태입니다."
+
+  - alert: HostDown
+    expr: up{job="node-exporter"} == 0
+    for: 0m
+    labels:
+      severity: critical
+    annotations:
+      summary: "서버(호스트) 다운"
+      description: "서버가 응답하지 않습니다."
+
+  - alert: HostUp
+    expr: up{job="node-exporter"} == 1
+    for: 0m
+    labels:
+      severity: info
+    annotations:
+      summary: "서버(호스트) 복구"
+      description: "서버가 다시 응답하기 시작했습니다." 
