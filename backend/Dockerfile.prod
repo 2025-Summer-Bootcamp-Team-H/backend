@@ -50,4 +50,11 @@ ENV PYTHONPATH=/app
 EXPOSE 8000
 
 # 프로덕션 모드로 실행 (reload 제거)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"] 
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+# 트레이싱/모니터링 환경변수의 기본값을 Dockerfile.prod에 추가한다. (실제 값은 docker-compose/env.prod에서 주입)
+ENV OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
+ENV OTEL_SERVICE_NAME=insurance_backend
+ENV PROMETHEUS_METRICS_ENABLED=true
+ENV LOG_LEVEL=INFO
+ENV LOG_FILE=./logs/app.log 

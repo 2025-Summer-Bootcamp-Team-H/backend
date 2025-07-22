@@ -31,6 +31,11 @@ services:
       - env.prod
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME}
+      - PROMETHEUS_METRICS_ENABLED=${PROMETHEUS_METRICS_ENABLED}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_FILE=${LOG_FILE}
     volumes:
       - ./uploads:/app/uploads  # 로컬 파일 저장 지원
       - ./tmp:/app/tmp
