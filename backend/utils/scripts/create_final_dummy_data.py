@@ -686,35 +686,103 @@ def create_medical_and_claim_data(db, clause_objects, products):
     print(f"   - {len(patients)} UserContracts (보험 가입 계약)")
     print(f"   - {len(patients)} Claims (all cases)")
 
+def create_choiilwoo_insurance_only(db):
+    """
+    최일우만을 위한 보험상품/특약/가입 더미데이터만 추가
+    """
+    print("\n👤 [최일우 전용] 보험상품/특약/가입 더미데이터 생성")
+
+    # 1. 최일우 사용자 생성
+    user = User(
+        email="choiilwoo@example.com",
+        name="최일우",
+        password=get_password_hash("choiilwoo123")
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # 2. 보험사/상품 생성
+    company = InsuranceCompany(
+        name="삼성생명",
+        code="SAMSUNG_LIFE",
+        is_active=True
+    )
+    db.add(company)
+    db.commit()
+    db.refresh(company)
+
+    product = InsuranceProduct(
+        company_id=company.id,
+        name="실손의료비보장보험",
+        product_code="MEDICAL_EXPENSE",
+        description="의료비 실손을 보장하는 보험",
+        is_active=True
+    )
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+
+    # 3. 특약(클라우즈) 생성
+    clause1 = InsuranceClause(
+        clause_code="CLAUSE_MRI_REAL",
+        clause_name="영상진단특약",
+        product_id=product.id,
+        category="검사",
+        unit_type="amount",
+        per_unit=32784,
+        max_total=32784,
+        conditions="외래 MRI 검사 시 본인부담금 지급",
+        description="외래 MRI 검사 시 본인부담금(32,784원) 지급"
+    )
+    db.add(clause1)
+
+    clause2 = InsuranceClause(
+        clause_code="CLAUSE_FRACTURE_REAL",
+        clause_name="골절특약",
+        product_id=product.id,
+        category="상해",
+        unit_type="amount",
+        per_unit=20000,
+        max_total=20000,
+        conditions="골절 진단 시 지급",
+        description="골절 진단 시 2만원 지급"
+    )
+    db.add(clause2)
+    db.commit()
+
+    # 4. 최일우 보험가입 계약 생성
+    contract = UserContract(
+        user_id=user.id,
+        patient_name="최일우",
+        patient_ssn="000830-3381025",
+        product_id=product.id,
+        contract_number="CONTRACT-CHOIILWOO-001",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 12, 31),
+        premium_amount=30000,
+        status="active"
+    )
+    db.add(contract)
+    db.commit()
+    print("✅ [최일우 전용] 보험상품/특약/가입 데이터 생성 완료")
+
 def main():
     """Main function to create all dummy data"""
     print("🚀 Starting Enhanced Dummy Data Creation...")
-    
     # Initialize database
     engine = init_database()
-    
     # Create session
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
-    
     try:
-        # Create all data
+        # 기존 전체 더미데이터 생성
         create_users(db)
         clause_objects, products = create_insurance_data(db)
         create_medical_and_claim_data(db, clause_objects, products)
-        
-        print("\n🎉 All enhanced dummy data created successfully!")
-        print("\n📊 Summary:")
-        print("   - 5 Users (insurance employees)")
-        print("   - 1 Insurance Company (삼성생명)")
-        print("   - 3 Insurance Products")
-        print(f"   - {len(clause_objects)} Insurance Clauses (from extracted data)")
-        print("   - 30 Patients with medical cases")
-        print("   - 14 Passed cases (보험금 지급)")
-        print("   - 6 Failed cases (보험금 미지급)")
-        print("   - Diagnosis-clause matching logic implemented")
-        print("   - Detailed claim information stored")
-        
+        # 최일우 전용 보험/특약/가입 데이터도 추가
+        create_choiilwoo_insurance_only(db)
+        print("\n🎉 전체 더미데이터 + 최일우 전용 보험/특약/가입 데이터 생성 완료!")
     except Exception as e:
         print(f"❌ Error creating dummy data: {e}")
         db.rollback()
