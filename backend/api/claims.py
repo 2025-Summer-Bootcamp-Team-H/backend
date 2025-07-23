@@ -125,11 +125,11 @@ async def create_claim(
         claim.claim_reason = f"상세내역: {json.dumps(detailed_info, ensure_ascii=False)}"
         claim.claim_amount = calculation_result["total_amount"]
         
-        # 청구 상태 설정 (보험금이 있으면 approved, 없으면 rejected)
+        # 청구 상태 설정 (보험금이 있으면 passed, 없으면 failed)
         if calculation_result["total_amount"] > 0:
-            claim.status = "approved"
+            claim.status = "passed"
         else:
-            claim.status = "rejected"
+            claim.status = "failed"
         
         db.commit()
         
