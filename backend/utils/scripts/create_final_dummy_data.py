@@ -260,109 +260,61 @@ def create_insurance_data(db):
     print(f"📋 Created {len(clause_objects)} insurance clauses from extracted data")
     return clause_objects, products
 
-def match_diagnosis_to_clauses(diagnosis_name, treatment_type, admission_days, medical_cost):
-    """Match diagnosis to relevant insurance clauses"""
+def match_diagnosis_to_clauses(diagnosis_name, treatment_type, treatment_details=None):
     diagnosis_lower = diagnosis_name.lower()
-    
-    # Define diagnosis-clause matching rules
     matching_rules = {
-        # 암 관련
-        "암": ["암진단특약", "암직접치료입원특약", "암직접치료수술특약"],
-        "유방암": ["암진단특약", "암직접치료입원특약", "암직접치료수술특약"],
-        "폐암": ["암진단특약", "암직접치료입원특약", "암직접치료수술특약"],
-        "대장암": ["암진단특약", "암직접치료입원특약", "암직접치료수술특약"],
-        "위암": ["암진단특약", "암직접치료입원특약", "암직접치료수술특약"],
-        
-        # 심장 관련
-        "심근경색": ["중증질병진단특약", "중증질병입원특약", "중증질병수술특약"],
-        "협심증": ["질병진단특약", "질병입원특약", "질병수술특약"],
-        "부정맥": ["질병진단특약", "질병입원특약"],
-        
-        # 뇌 관련
-        "뇌졸중": ["중증질병진단특약", "중증질병입원특약", "중증질병수술특약"],
-        "뇌출혈": ["중증질병진단특약", "중증질병입원특약", "중증질병수술특약"],
-        
-        # 폐 관련
-        "폐렴": ["질병진단특약", "질병입원특약", "질병치료특약"],
-        "기관지염": ["질병진단특약", "질병통원특약"],
-        
-        # 소화기 관련
-        "위염": ["질병진단특약", "질병통원특약"],
-        "십이지장궤양": ["질병진단특약", "질병입원특약", "질병수술특약"],
-        
-        # 내분비 관련
-        "당뇨병": ["질병진단특약", "질병통원특약", "질병치료특약"],
-        "갑상선기능항진증": ["질병진단특약", "질병통원특약"],
-        
-        # 신장 관련
-        "신증": ["중증질병진단특약", "중증질병입원특약", "중증질병치료특약"],
-        "신부전": ["중증질병진단특약", "중증질병입원특약", "중증질병치료특약"],
-        
-        # 외상 관련
-        "골절": ["상해입원특약", "상해수술특약"],
-        "탈구": ["상해입원특약", "상해치료특약"],
-        "절상": ["상해입원특약", "상해치료특약"],
-        
-        # 기타
-        "고혈압": ["질병진단특약", "질병통원특약"],
-        "관절염": ["질병진단특약", "질병통원특약", "질병치료특약"],
+        "암": ["암진단특약", "암직접치료입원특약", "암직접치료수술특약", "질병진단특약", "질병통원특약"],
+        "골절": ["골절특약", "상해입원특약", "상해수술특약", "질병진단특약", "입원특약", "질병통원특약"],
+        "심근경색": ["중증질병진단특약", "질병진단특약", "입원특약"],
+        "뇌졸중": ["중증질병진단특약", "질병진단특약", "입원특약"],
+        "위암": ["암진단특약", "질병진단특약", "입원특약"],
+        "관절염": ["질병진단특약", "입원특약", "질병치료특약"],
+        # ... 기타 진단명도 다양하게 추가 가능 ...
     }
-    
-    # Find matching clauses based on diagnosis
     matched_clauses = []
     for keyword, clauses in matching_rules.items():
         if keyword in diagnosis_lower:
             matched_clauses.extend(clauses)
-            break
-    
-    # If no specific match, use general clauses based on treatment type
-    if not matched_clauses:
-        if treatment_type == "입원치료":
-            matched_clauses = ["질병입원특약"]
-        elif treatment_type == "수술":
-            matched_clauses = ["질병수술특약"]
-        elif treatment_type == "통원치료":
-            matched_clauses = ["질병통원특약"]
-        else:
-            matched_clauses = ["질병진단특약"]
-    
-    return matched_clauses
+    # 치료유형별 추가
+    if treatment_type == "입원치료":
+        matched_clauses.append("입원특약")
+    if treatment_type == "수술":
+        matched_clauses.append("수술특약")
+    if treatment_type == "통원치료":
+        matched_clauses.append("질병통원특약")
+    # 영수증 요약에 영상진단 있으면 영상진단특약 추가
+    if treatment_details and "영상진단" in treatment_details:
+        matched_clauses.append("영상진단특약")
+    # 중복 제거
+    matched_clauses = list(dict.fromkeys(matched_clauses))
+    # 특약 개수 4개로 제한 (우선순위: 진단명→치료유형→영수증)
+    return matched_clauses[:4]
 
 def calculate_claim_amount(clause_names, clause_objects, diagnosis_name, treatment_type, admission_days, medical_cost):
-    """Calculate claim amount based on matched clauses"""
+    """Calculate claim amount based on matched clauses, limit to medical_cost"""
     total_amount = 0
     applied_clauses = []
-    
     for clause_name in clause_names:
         clause = next((c for c in clause_objects if c.clause_name == clause_name), None)
         if clause:
             amount = 0
-            
             if clause.unit_type == "amount":
                 if "입원" in clause.clause_name and admission_days > 0:
-                    # Per day payment for hospitalization
-                    amount = clause.per_unit * admission_days
-                    amount = min(amount, clause.max_total)
+                    amount = min(clause.per_unit * admission_days, clause.max_total, medical_cost)
                 elif "진단" in clause.clause_name:
-                    # One-time payment for diagnosis
-                    amount = clause.per_unit
+                    amount = min(clause.per_unit, clause.max_total, medical_cost)
                 elif "수술" in clause.clause_name and treatment_type == "수술":
-                    # One-time payment for surgery
-                    amount = clause.per_unit
+                    amount = min(clause.per_unit, clause.max_total, medical_cost)
                 elif "통원" in clause.clause_name and treatment_type == "통원치료":
-                    # Payment for outpatient treatment
-                    amount = clause.per_unit
+                    amount = min(clause.per_unit, clause.max_total, medical_cost)
                 else:
-                    # General treatment coverage
-                    amount = clause.per_unit
-                
+                    amount = min(clause.per_unit, clause.max_total, medical_cost)
                 total_amount += amount
                 applied_clauses.append({
                     "clause_name": clause.clause_name,
                     "amount": amount,
                     "reason": f"{clause.clause_name} 적용"
                 })
-    
     return total_amount, applied_clauses
 
 def create_realistic_patients():
@@ -520,7 +472,7 @@ def match_and_calculate_realistic_clauses(patient_data, clause_objects):
         return total_claim, matched, applied
     # --- 이하 일반 환자 케이스 ---
     # 기존 로직을 현실적으로 보정(예: 지급액은 medical_cost 이하, 특약 한도 내, 소수점 허용)
-    matched_clauses = match_diagnosis_to_clauses(diagnosis, treatment_type, admission_days, medical_cost)
+    matched_clauses = match_diagnosis_to_clauses(diagnosis, treatment_type, treatment_details=None) # treatment_details 제거
     applied_clauses = []
     total_amount = 0.0
     for clause_name in matched_clauses:
@@ -598,8 +550,13 @@ def create_medical_and_claim_data(db, clause_objects, products):
         db.commit()
         db.refresh(receipt)
         # Create UserContract (보험 가입 계약)
-        product_choice = i % 3
-        selected_product = products[product_choice]
+        # 보험상품 선택
+        if patient_data["name"] == "최일우":
+            # 무조건 실손의료비보장보험으로 지정
+            selected_product = next(p for p in products if p.name == "실손의료비보장보험")
+        else:
+            product_choice = i % 3
+            selected_product = products[product_choice]
         contract_number = f"CONTRACT-{patient_data['ssn'][:6]}-{i:03d}"
         start_date = diagnosis_date - timedelta(days=random.randint(30, 365))
         end_date = start_date + timedelta(days=365)
@@ -688,9 +645,9 @@ def create_medical_and_claim_data(db, clause_objects, products):
 
 def create_choiilwoo_insurance_only(db):
     """
-    최일우만을 위한 보험상품/특약/가입 더미데이터만 추가
+    최일우만을 위한 보험상품/특약/가입 더미데이터(특약 4개만) 추가
     """
-    print("\n👤 [최일우 전용] 보험상품/특약/가입 더미데이터 생성")
+    print("\n👤 [최일우 전용] 보험상품/특약/가입 더미데이터 생성 (특약 4개만)")
 
     # 1. 최일우 사용자 생성
     user = User(
@@ -714,44 +671,67 @@ def create_choiilwoo_insurance_only(db):
 
     product = InsuranceProduct(
         company_id=company.id,
-        name="실손의료비보장보험",
-        product_code="MEDICAL_EXPENSE",
-        description="의료비 실손을 보장하는 보험",
+        name="희망사랑보험",  # 여기만 바꿔주면 됨!
+        product_code="HOPE_LOVE",
+        description="사랑하는 가족을 위한 종합보험",
         is_active=True
     )
     db.add(product)
     db.commit()
     db.refresh(product)
 
-    # 3. 특약(클라우즈) 생성
-    clause1 = InsuranceClause(
-        clause_code="CLAUSE_MRI_REAL",
-        clause_name="영상진단특약",
-        product_id=product.id,
-        category="검사",
-        unit_type="amount",
-        per_unit=32784,
-        max_total=32784,
-        conditions="외래 MRI 검사 시 본인부담금 지급",
-        description="외래 MRI 검사 시 본인부담금(32,784원) 지급"
-    )
-    db.add(clause1)
-
-    clause2 = InsuranceClause(
-        clause_code="CLAUSE_FRACTURE_REAL",
-        clause_name="골절특약",
-        product_id=product.id,
-        category="상해",
-        unit_type="amount",
-        per_unit=20000,
-        max_total=20000,
-        conditions="골절 진단 시 지급",
-        description="골절 진단 시 2만원 지급"
-    )
-    db.add(clause2)
+    # 3. 특약(클라우즈) 4개만 생성 (희망사랑보험에 연결)
+    clauses = [
+        InsuranceClause(
+            clause_code="CLAUSE_MRI_REAL",
+            clause_name="영상진단특약",
+            product_id=product.id,
+            category="검사",
+            unit_type="amount",
+            per_unit=32784,
+            max_total=32784,
+            conditions="외래 MRI 검사 시 본인부담금 지급",
+            description="외래 MRI 검사 시 본인부담금(32,784원) 지급"
+        ),
+        InsuranceClause(
+            clause_code="CLAUSE_FRACTURE_REAL",
+            clause_name="골절특약",
+            product_id=product.id,
+            category="상해",
+            unit_type="amount",
+            per_unit=20000,
+            max_total=20000,
+            conditions="골절 진단 시 지급",
+            description="골절 진단 시 2만원 지급"
+        ),
+        InsuranceClause(
+            clause_code="CLAUSE_DISEASE_DIAGNOSIS",
+            clause_name="질병진단특약",
+            product_id=product.id,
+            category="진단",
+            unit_type="amount",
+            per_unit=10000,
+            max_total=10000,
+            conditions="질병 진단 시 지급",
+            description="질병 진단 시 1만원 지급"
+        ),
+        InsuranceClause(
+            clause_code="CLAUSE_DISEASE_OUTPATIENT",
+            clause_name="질병통원특약",
+            product_id=product.id,
+            category="통원치료",
+            unit_type="amount",
+            per_unit=5000,
+            max_total=5000,
+            conditions="질병 통원 시 지급",
+            description="질병 통원 시 5천원 지급"
+        ),
+    ]
+    for clause in clauses:
+        db.add(clause)
     db.commit()
 
-    # 4. 최일우 보험가입 계약 생성
+    # 4. 최일우 보험가입 계약 생성 (희망사랑보험)
     contract = UserContract(
         user_id=user.id,
         patient_name="최일우",
@@ -765,7 +745,7 @@ def create_choiilwoo_insurance_only(db):
     )
     db.add(contract)
     db.commit()
-    print("✅ [최일우 전용] 보험상품/특약/가입 데이터 생성 완료")
+    print("✅ [최일우 전용] 보험상품/특약/가입 데이터(특약 4개, 희망사랑보험) 생성 완료")
 
 def main():
     """Main function to create all dummy data"""

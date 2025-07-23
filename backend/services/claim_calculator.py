@@ -402,54 +402,47 @@ class ClaimCalculator:
         claim = self.db.query(Claim).filter(Claim.id == claim_id).first()
         if not claim:
             raise ValueError("청구 정보를 찾을 수 없습니다.")
-        
         diagnosis = claim.diagnosis
         receipt = claim.receipt
-        
         # 기존 계산 결과 삭제
         self.db.query(ClaimCalculation).filter(
             ClaimCalculation.claim_id == claim_id
         ).delete()
-        
+        applicable_clauses = []
+        for clause in clauses:
+            if self._is_clause_applicable_for_claim(clause, diagnosis, receipt):
+                applicable_clauses.append(clause)
+        # 최일우만 특약 4개로 제한
+        if diagnosis.patient_name == "최일우":
+            applicable_clauses = applicable_clauses[:4]
         calculations = []
         total_amount = 0
-        
-        # 전달받은 특약들만 계산
-        for clause in clauses:
-            # 특약 적용 가능 여부 확인
-            if self._is_clause_applicable_for_claim(clause, diagnosis, receipt):
-                amount = self._calculate_clause_amount(clause, diagnosis, receipt)
-                
-                if amount > 0:
-                    calculation = ClaimCalculation(
-                        claim_id=claim_id,
-                        clause_id=clause.id,
-                        calculated_amount=amount,
-                        calculation_logic=self._get_calculation_logic(clause, diagnosis, receipt, amount)
-                    )
-                    calculations.append(calculation)
-                    total_amount += amount
-        
+        for clause in applicable_clauses:
+            amount = self._calculate_clause_amount(clause, diagnosis, receipt)
+            if amount > 0:
+                calculation = ClaimCalculation(
+                    claim_id=claim_id,
+                    clause_id=clause.id,
+                    calculated_amount=amount,
+                    calculation_logic=self._get_calculation_logic(clause, diagnosis, receipt, amount)
+                )
+                calculations.append(calculation)
+                total_amount += amount
         # 총 보험금이 실제 의료비를 초과하지 않도록 제한
         actual_medical_cost = receipt.total_amount
         if total_amount > actual_medical_cost:
             reduction_ratio = actual_medical_cost / total_amount
-            
             for calc in calculations:
                 original_amount = calc.calculated_amount
                 calc.calculated_amount = original_amount * reduction_ratio
                 calc.calculation_logic += f" → 의료비 한도 적용: {original_amount:,.0f} × {reduction_ratio:.2%} = {calc.calculated_amount:,.0f}원"
-            
             total_amount = actual_medical_cost
-        
         # 계산 결과 저장
         for calc in calculations:
             self.db.add(calc)
-        
         # 청구 금액 업데이트
         claim.claim_amount = total_amount
         self.db.commit()
-        
         return {
             "claim_id": claim_id,
             "total_amount": total_amount,

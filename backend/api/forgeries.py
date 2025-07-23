@@ -12,6 +12,7 @@ import tempfile
 from services.storage_service import storage_service
 import uuid
 import traceback
+import json
 
 router = APIRouter()
 logger = logging.getLogger("forgery_debug")
@@ -98,7 +99,10 @@ def analyze_forgery(data: ForgeryRequest, db: Session = Depends(get_db)):
             receipt_id=data.receipt_id,
             analysis_result=f"diagnosis: {diagnosis_result['predicted_class']}, receipt: {receipt_result['predicted_class']}",
             confidence_score=(diagnosis_result['confidence'] + receipt_result['confidence']) / 2,
-            fraud_indicators=None
+            fraud_indicators=json.dumps({
+                "diagnosis_result": diagnosis_result,
+                "receipt_result": receipt_result
+            })
         )
         db.add(forgery)
         db.commit()
@@ -132,4 +136,19 @@ def get_forgery_analysis(forgery_analysis_id: int, db: Session = Depends(get_db)
     forgery = db.query(ForgeryAnalysis).filter_by(id=forgery_analysis_id).first()
     if not forgery:
         raise HTTPException(status_code=404, detail="Forgery analysis not found")
-    return forgery
+    diagnosis_result = None
+    receipt_result = None
+    if forgery.fraud_indicators:
+        try:
+            indicators = json.loads(forgery.fraud_indicators)
+            diagnosis_result = indicators.get("diagnosis_result")
+            receipt_result = indicators.get("receipt_result")
+        except Exception:
+            pass
+    return {
+        "forgery_analysis_id": forgery.id,
+        "diagnosis_result": diagnosis_result,
+        "receipt_result": receipt_result,
+        "analysis_result": forgery.analysis_result,
+        "confidence_score": forgery.confidence_score
+    }
