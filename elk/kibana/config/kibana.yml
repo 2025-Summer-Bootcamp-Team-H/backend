@@ -1,0 +1,10 @@
+server.host: "0.0.0.0"
+# Kibana가 연결할 Elasticsearch 주소
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+# Stack Monitoring UI에서 컨테이너 환경 지원 활성화
+monitoring.ui.container.elasticsearch.enabled: true
+monitoring.ui.container.logstash.enabled: true
+# SSL 인증서 검증 비활성화(HTTP 환경에서는 무시됨)
+elasticsearch.ssl.verificationMode: none
+# 필요시 추가 설정 작성
+xpack.interactiveSetup.enabled: false

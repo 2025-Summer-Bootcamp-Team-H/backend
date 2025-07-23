@@ -1,0 +1,29 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/nginx/access.log
+      - /var/log/nginx/error.log
+    processors:
+      - decode_json_fields:
+          fields: ["message"]
+          target: "parsed_message"
+          overwrite_keys: true
+
+# output.logstash의 hosts는 backend/docker-compose.elk.yml 기준 logstash 서비스명과 포트(5044)로 지정해야 합니다.
+output.logstash:
+  hosts: ["logstash:5044"]
+  # 기본값 true
+  # enabled: true
+
+#자주 쓰는 로그 포맷을 자동 파싱(미리 설정됨)
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+
+# Filebeat가 Kibana와 직접 연결해서
+# 대시보드, 인덱스 템플릿, 시각화 등을
+# 자동으로 설치/설정할 수 있게 해주는 옵션
+setup.kibana:
+  host: "http://kibana:5601"
+  username: "elastic"
+  password: "password"

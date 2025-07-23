@@ -63,6 +63,7 @@ services:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl:/etc/nginx/ssl
       - ./uploads:/var/www/uploads:ro
+      - ./elk/nginx/log:/var/log/nginx
     depends_on:
       - backend
     restart: unless-stopped
@@ -77,6 +78,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alert.rules.yml:/etc/prometheus/alert.rules.yml
     restart: always
     networks:
       - insurance_network
@@ -121,10 +123,43 @@ services:
     networks:
       - insurance_network
 
+  # Alertmanager (알림 관리)
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager_prod
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    restart: always
+    networks:
+      - insurance_network
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_prod
+    ports:
+      - "9100:9100"
+    restart: always
+    networks:
+      - insurance_network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: postgres_exporter_prod
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres
+    networks:
+      - insurance_network
+
 volumes:
   postgres_data:
   grafana_data:
 
 networks:
   insurance_network:
-    driver: bridge 
+    driver: bridge
