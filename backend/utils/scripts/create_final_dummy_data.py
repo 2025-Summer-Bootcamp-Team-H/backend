@@ -659,92 +659,71 @@ def create_choiilwoo_insurance_only(db):
     db.commit()
     db.refresh(user)
 
-    # 2. 보험사/상품 생성
-    company = InsuranceCompany(
-        name="삼성생명",
-        code="SAMSUNG_LIFE",
-        is_active=True
-    )
-    db.add(company)
-    db.commit()
-    db.refresh(company)
+    # 2. 보험사/상품 생성 (중복 체크)
+    company = db.query(InsuranceCompany).filter_by(code="SAMSUNG_LIFE").first()
+    if not company:
+        company = InsuranceCompany(
+            name="삼성생명",
+            code="SAMSUNG_LIFE",
+            is_active=True
+        )
+        db.add(company)
+        db.commit()
+        db.refresh(company)
 
-    product = InsuranceProduct(
-        company_id=company.id,
-        name="희망사랑보험",  # 여기만 바꿔주면 됨!
-        product_code="HOPE_LOVE",
-        description="사랑하는 가족을 위한 종합보험",
-        is_active=True
-    )
-    db.add(product)
-    db.commit()
-    db.refresh(product)
+    product = db.query(InsuranceProduct).filter_by(company_id=company.id, name="희망사랑보험").first()
+    if not product:
+        product = InsuranceProduct(
+            company_id=company.id,
+            name="희망사랑보험",  # 여기만 바꿔주면 됨!
+            product_code="HOPE_LOVE",
+            description="사랑하는 가족을 위한 종합보험",
+            is_active=True
+        )
+        db.add(product)
+        db.commit()
+        db.refresh(product)
 
-    # 3. 특약(클라우즈) 4개만 생성 (희망사랑보험에 연결)
-    clauses = [
-        InsuranceClause(
-            clause_code="CLAUSE_MRI_REAL",
-            clause_name="영상진단특약",
-            product_id=product.id,
-            category="검사",
-            unit_type="amount",
-            per_unit=32784,
-            max_total=32784,
-            conditions="외래 MRI 검사 시 본인부담금 지급",
-            description="외래 MRI 검사 시 본인부담금(32,784원) 지급"
-        ),
-        InsuranceClause(
-            clause_code="CLAUSE_FRACTURE_REAL",
-            clause_name="골절특약",
-            product_id=product.id,
-            category="상해",
-            unit_type="amount",
-            per_unit=20000,
-            max_total=20000,
-            conditions="골절 진단 시 지급",
-            description="골절 진단 시 2만원 지급"
-        ),
-        InsuranceClause(
-            clause_code="CLAUSE_DISEASE_DIAGNOSIS",
-            clause_name="질병진단특약",
-            product_id=product.id,
-            category="진단",
-            unit_type="amount",
-            per_unit=10000,
-            max_total=10000,
-            conditions="질병 진단 시 지급",
-            description="질병 진단 시 1만원 지급"
-        ),
-        InsuranceClause(
-            clause_code="CLAUSE_DISEASE_OUTPATIENT",
-            clause_name="질병통원특약",
-            product_id=product.id,
-            category="통원치료",
-            unit_type="amount",
-            per_unit=5000,
-            max_total=5000,
-            conditions="질병 통원 시 지급",
-            description="질병 통원 시 5천원 지급"
-        ),
+    # 3. 특약(클라우즈) 4개만 생성 (희망사랑보험에 연결, 중복 체크)
+    clause_defs = [
+        ("CLAUSE_MRI_REAL", "영상진단특약", "검사", 32784, 32784, "외래 MRI 검사 시 본인부담금 지급", "외래 MRI 검사 시 본인부담금(32,784원) 지급"),
+        ("CLAUSE_FRACTURE_REAL", "골절특약", "상해", 20000, 20000, "골절 진단 시 지급", "골절 진단 시 2만원 지급"),
+        ("CLAUSE_DISEASE_DIAGNOSIS", "질병진단특약", "진단", 10000, 10000, "질병 진단 시 지급", "질병 진단 시 1만원 지급"),
+        ("CLAUSE_DISEASE_OUTPATIENT", "질병통원특약", "통원치료", 5000, 5000, "질병 통원 시 지급", "질병 통원 시 5천원 지급"),
     ]
-    for clause in clauses:
-        db.add(clause)
+    for clause_code, clause_name, category, per_unit, max_total, conditions, description in clause_defs:
+        clause = db.query(InsuranceClause).filter_by(product_id=product.id, clause_name=clause_name).first()
+        if not clause:
+            clause = InsuranceClause(
+                clause_code=clause_code,
+                clause_name=clause_name,
+                product_id=product.id,
+                category=category,
+                unit_type="amount",
+                per_unit=per_unit,
+                max_total=max_total,
+                conditions=conditions,
+                description=description
+            )
+            db.add(clause)
     db.commit()
 
-    # 4. 최일우 보험가입 계약 생성 (희망사랑보험)
-    contract = UserContract(
-        user_id=user.id,
-        patient_name="최일우",
-        patient_ssn="000830-3381025",
-        product_id=product.id,
-        contract_number="CONTRACT-CHOIILWOO-001",
-        start_date=date(2024, 1, 1),
-        end_date=date(2024, 12, 31),
-        premium_amount=30000,
-        status="active"
-    )
-    db.add(contract)
-    db.commit()
+    # 4. 최일우 보험가입 계약 생성 (희망사랑보험, 중복 체크)
+    contract = db.query(UserContract).filter_by(patient_name="최일우", patient_ssn="000830-3381025", product_id=product.id).first()
+    if not contract:
+        contract = UserContract(
+            user_id=user.id,
+            patient_name="최일우",
+            patient_ssn="000830-3381025",
+            product_id=product.id,
+            contract_number="CONTRACT-CHOIILWOO-001",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
+            premium_amount=30000,
+            status="active"
+        )
+        db.add(contract)
+        db.commit()
     print("✅ [최일우 전용] 보험상품/특약/가입 데이터(특약 4개, 희망사랑보험) 생성 완료")
 
 def main():
