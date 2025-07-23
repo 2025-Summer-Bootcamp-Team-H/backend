@@ -552,8 +552,8 @@ def create_medical_and_claim_data(db, clause_objects, products):
         # Create UserContract (보험 가입 계약)
         # 보험상품 선택
         if patient_data["name"] == "최일우":
-            # 무조건 실손의료비보장보험으로 지정
-            selected_product = next(p for p in products if p.name == "실손의료비보장보험")
+            # 무조건 희망사랑보험으로 지정
+            selected_product = next(p for p in products if p.name == "희망사랑보험")
         else:
             product_choice = i % 3
             selected_product = products[product_choice]
