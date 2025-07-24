@@ -14,7 +14,9 @@ async def get_diagnosis_image(diagnosis_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="진단서 이미지가 없습니다.")
     # 클라우드 스토리지 URL이면 리다이렉트
     if diagnosis.image_url.startswith("http"):
-        return RedirectResponse(diagnosis.image_url)
+        response = RedirectResponse(diagnosis.image_url)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
     # 로컬 파일이면 파일 반환
     local_path = diagnosis.image_url
     if not os.path.isabs(local_path):

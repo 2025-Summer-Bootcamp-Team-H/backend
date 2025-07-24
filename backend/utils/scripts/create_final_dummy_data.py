@@ -473,6 +473,9 @@ def match_and_calculate_realistic_clauses(patient_data, clause_objects):
     # --- 이하 일반 환자 케이스 ---
     # 기존 로직을 현실적으로 보정(예: 지급액은 medical_cost 이하, 특약 한도 내, 소수점 허용)
     matched_clauses = match_diagnosis_to_clauses(diagnosis, treatment_type, treatment_details=None) # treatment_details 제거
+    # 데모/발표용: 최일우 환자는 4개 특약만 적용
+    if patient_data["name"] == "최일우":
+        matched_clauses = matched_clauses[:4]
     applied_clauses = []
     total_amount = 0.0
     for clause_name in matched_clauses:
