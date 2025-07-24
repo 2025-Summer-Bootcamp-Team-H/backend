@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "http://34.64.41.118",
+      "https://claimbridge.world",
+      "https://www.claimbridge.world"
+    ],
+    "responseHeader": ["Content-Type"],
+    "method": ["GET", "HEAD"],
+    "maxAgeSeconds": 3600
+  }
+] 
