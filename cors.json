@@ -5,8 +5,14 @@
       "https://claimbridge.world",
       "https://www.claimbridge.world"
     ],
-    "responseHeader": ["Content-Type"],
-    "method": ["GET", "HEAD"],
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers"
+    ],
+    "method": ["GET", "HEAD", "OPTIONS"],
     "maxAgeSeconds": 3600
   }
-] 
+]
