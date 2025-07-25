@@ -90,9 +90,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
     
-    - name: Run security checks
+    - name: Run pip-audit
+      run: |
+        pip install pip-audit
+        pip-audit
+    
+    - name: Run bandit
       run: |
         pip install bandit
         cd backend
-        bandit -r . -f json -o bandit-report.json || true
-        bandit -r . -f txt -o bandit-report.txt || true 
+        bandit -r . -f json -o bandit-report.json
+        bandit -r . -f txt -o bandit-report.txt
+        bandit -r . 
