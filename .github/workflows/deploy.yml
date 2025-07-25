@@ -34,12 +34,12 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd backend/backend
+        cd backend
         pip install -r requirements.txt
     
     - name: Run tests
       run: |
-        cd backend/backend
+        cd backend
         pytest tests/ -v
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
