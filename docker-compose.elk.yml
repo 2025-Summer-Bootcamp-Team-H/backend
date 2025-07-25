@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    build:
+      context: ./elk/elasticsearch
+      args:
+        ELASTIC_VERSION: 8.13.4
+    container_name: elk_elasticsearch
+    volumes:
+      - ./elk/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro,Z
+      - ./elk/elasticsearch/data:/usr/share/elasticsearch/data:Z
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      node.name: elasticsearch
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      ELASTIC_PASSWORD: changeme
+      discovery.type: single-node
+    restart: unless-stopped
+
+  logstash:
+    build:
+      context: ./elk/logstash
+      args:
+        ELASTIC_VERSION: 8.13.4
+    container_name: elk_logstash
+    volumes:
+      - ./elk/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
+      - ./elk/logstash/pipeline:/usr/share/logstash/pipeline:ro,Z
+      - ./backend/logs:/app/logs
+    ports:
+      - 5044:5044
+      - 50000:50000/tcp
+      - 50000:50000/udp
+      - 9600:9600
+    environment:
+      LS_JAVA_OPTS: -Xms256m -Xmx256m
+      LOGSTASH_INTERNAL_PASSWORD: changeme
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  kibana:
+    build:
+      context: ./elk/kibana
+      args:
+        ELASTIC_VERSION: 8.13.4
+    container_name: elk_kibana
+    volumes:
+      - ./elk/kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro,Z
+    ports:
+      - 5601:5601
+    environment:
+      KIBANA_SYSTEM_PASSWORD: changeme
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.13.4
+    container_name: elk_filebeat
+    user: root
+    volumes:
+      - ./elk/filebeat/config/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./elk/nginx/log:/var/log/nginx:ro
+    depends_on:
+      - logstash
+      - elasticsearch
+      - kibana
+    entrypoint: "filebeat -e -strict.perms=false"
+    restart: unless-stopped
+
+networks:
+  default:
+    driver: bridge

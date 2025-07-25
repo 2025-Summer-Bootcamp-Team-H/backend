@@ -64,6 +64,7 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./uploads:/var/www/uploads:ro
+      - ./elk/nginx/log:/var/log/nginx
     depends_on:
       - backend
     restart: unless-stopped
@@ -162,4 +163,4 @@ volumes:
 
 networks:
   insurance_network:
-    driver: bridge 
+    driver: bridge
