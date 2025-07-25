@@ -74,7 +74,7 @@ torchvision
 scikit-learn
 
 prometheus_fastapi_instrumentator<7.0.0
-starlette==0.36.0
+starlette==0.35.1
 
 # OpenTelemetry
 opentelemetry-api==1.25.0
