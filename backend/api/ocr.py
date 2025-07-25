@@ -7,8 +7,11 @@ from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 import os
 import base64
+import json
 from openai import OpenAI
 from .medical import DiagnosisUpdate, ReceiptUpdate
+import requests
+from services.storage_service import storage_service
 
 router = APIRouter()
 
@@ -22,10 +25,51 @@ client = OpenAI(
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
 
-def encode_img_to_base64(img_path):
-    with open(img_path, 'rb') as img_file:
-        img_bytes = img_file.read()
-        return base64.b64encode(img_bytes).decode('utf-8')
+class DiagnosisUpdate(BaseModel):
+    patient_name: Optional[str] = None
+    patient_ssn: Optional[str] = None
+    diagnosis_name: Optional[str] = None
+    diagnosis_date: Optional[date] = None
+    diagnosis_text: Optional[str] = None
+    hospital_name: Optional[str] = None
+    doctor_name: Optional[str] = None
+    icd_code: Optional[str] = None
+    admission_days: Optional[int] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "patient_name": "홍길동",
+                "patient_ssn": "900101-1234567",
+                "diagnosis_name": "감기",
+                "diagnosis_date": "2024-07-16",
+                "diagnosis_text": "기침, 발열",
+                "hospital_name": "서울병원",
+                "doctor_name": "김의사",
+                "icd_code": "J00",
+                "admission_days": 3
+            }
+        }
+    )
+
+class ReceiptUpdate(BaseModel):
+    patient_name: Optional[str] = None
+    receipt_date: Optional[date] = None
+    hospital_name: Optional[str] = None
+    total_amount: Optional[float] = None
+    treatment_details: Optional[str] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "patient_name": "홍길동",
+                "receipt_date": "2024-07-16",
+                "hospital_name": "서울병원",
+                "total_amount": 50000,
+                "treatment_details": "진료비 상세내역"
+            }
+        }
+    )
 
 # 진단서 정보 추출용 JSON 스키마
 diagnosis_schema = {
@@ -75,10 +119,25 @@ async def ocr_diagnosis_extract(diagnosis_id: int, db: Session = Depends(get_db)
             raise HTTPException(status_code=404, detail="진단서를 찾을 수 없습니다.")
         if not diagnosis.image_url:
             raise HTTPException(status_code=400, detail="진단서 이미지가 업로드되지 않았습니다.")
-        file_path = os.path.join(UPLOAD_DIR, "diagnosis", os.path.basename(diagnosis.image_url))
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
-        base64_data = encode_img_to_base64(file_path)
+
+        # 스토리지 서비스를 사용하여 파일 읽기
+        try:
+            if diagnosis.image_url.startswith('http'):
+                # S3 URL인 경우
+                response = requests.get(diagnosis.image_url)
+                response.raise_for_status()
+                image_data = response.content
+            else:
+                # 로컬 파일인 경우
+                file_path = os.path.join(UPLOAD_DIR, "diagnosis", os.path.basename(diagnosis.image_url))
+                if not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
+                with open(file_path, 'rb') as f:
+                    image_data = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"이미지 파일 읽기 실패: {str(e)}")
+
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
         extraction_response = client.chat.completions.create(
             model="information-extract",
             messages=[
@@ -87,7 +146,7 @@ async def ocr_diagnosis_extract(diagnosis_id: int, db: Session = Depends(get_db)
                     "content": [
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:application/octet-stream;base64,{base64_data}"}
+                            "image_url": {"url": f"data:application/octet-stream;base64,{image_b64}"}
                         }
                     ]
                 }
@@ -98,8 +157,8 @@ async def ocr_diagnosis_extract(diagnosis_id: int, db: Session = Depends(get_db)
             }
         )
         fields = extraction_response.choices[0].message.content
-        print("Upstage 응답:", fields)  # 응답값 로그 출력
-        import json
+
+
         parsed = json.loads(fields)
         # 날짜 및 admission_days 처리
         if parsed.get("diagnosis_date"):
@@ -135,10 +194,24 @@ async def ocr_receipt_extract(receipt_id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="영수증을 찾을 수 없습니다.")
         if not receipt.image_url:
             raise HTTPException(status_code=400, detail="영수증 이미지가 업로드되지 않았습니다.")
-        file_path = os.path.join(UPLOAD_DIR, "receipts", os.path.basename(receipt.image_url))
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
-        base64_data = encode_img_to_base64(file_path)
+        # 스토리지 서비스를 사용하여 파일 읽기
+        try:
+            if receipt.image_url.startswith('http'):
+                # S3 URL인 경우
+                response = requests.get(receipt.image_url)
+                response.raise_for_status()
+                image_data = response.content
+            else:
+                # 로컬 파일인 경우
+                file_path = os.path.join(UPLOAD_DIR, "receipts", os.path.basename(receipt.image_url))
+                if not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="이미지 파일이 존재하지 않습니다.")
+                with open(file_path, 'rb') as f:
+                    image_data = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"이미지 파일 읽기 실패: {str(e)}")
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
+
         extraction_response = client.chat.completions.create(
             model="information-extract",
             messages=[
@@ -147,7 +220,7 @@ async def ocr_receipt_extract(receipt_id: int, db: Session = Depends(get_db)):
                     "content": [
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:application/octet-stream;base64,{base64_data}"}
+                            "image_url": {"url": f"data:application/octet-stream;base64,{image_b64}"}
                         }
                     ]
                 }
@@ -158,8 +231,8 @@ async def ocr_receipt_extract(receipt_id: int, db: Session = Depends(get_db)):
             }
         )
         fields = extraction_response.choices[0].message.content
-        print("Upstage 응답:", fields)  # 응답값 로그 출력
-        import json
+
+
         parsed = json.loads(fields)
         # 날짜 및 total_amount 처리
         if parsed.get("receipt_date"):
