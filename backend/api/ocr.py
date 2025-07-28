@@ -5,28 +5,26 @@ from models.models import MedicalDiagnosis, MedicalReceipt
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
-from openai import OpenAI
 import os
-from urllib.parse import urlparse
-import json
 import base64
-import re
+import json
+from openai import OpenAI
+from .medical import DiagnosisUpdate, ReceiptUpdate
 import requests
 from services.storage_service import storage_service
 
 router = APIRouter()
 
-# OpenAI API 키 환경변수에서 불러오기
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다.")
+UPSTAGE_OCR_API_KEY = os.getenv("UPSTAGE_OCR_API_KEY")
+UPSTAGE_OCR_API_URL = "https://api.upstage.ai/v1/information-extraction"
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(
+    api_key=UPSTAGE_OCR_API_KEY,
+    base_url=UPSTAGE_OCR_API_URL
+)
 
-# 환경변수에서 업로드 디렉토리 설정
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/app/uploads")
 
-# Pydantic 모델들 (기존 기능 유지)
 class DiagnosisUpdate(BaseModel):
     patient_name: Optional[str] = None
     patient_ssn: Optional[str] = None
@@ -60,7 +58,7 @@ class ReceiptUpdate(BaseModel):
     hospital_name: Optional[str] = None
     total_amount: Optional[float] = None
     treatment_details: Optional[str] = None
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -73,29 +71,55 @@ class ReceiptUpdate(BaseModel):
         }
     )
 
+# 진단서 정보 추출용 JSON 스키마
+diagnosis_schema = {
+    "name": "diagnosis_schema",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "patient_name": {"type": "string", "description": "환자 이름 (한글)"},
+            "patient_ssn": {"type": "string", "description": "주민등록번호 (하이픈 포함)"},
+            "diagnosis_name": {"type": "string", "description": "진단명"},
+            "diagnosis_date": {"type": "string", "description": "진단일자 (YYYY-MM-DD)"},
+            "diagnosis_text": {"type": "string", "description": "진단 내용 요약"},
+            "hospital_name": {"type": "string", "description": "병원명"},
+            "doctor_name": {"type": "string", "description": "의사 이름"},
+            "icd_code": {"type": "string", "description": "ICD 코드"},
+            "admission_days": {"type": "integer", "description": "입원 일수 (외래인 경우 0)"}
+        }
+    }
+}
+
+# 영수증 정보 추출용 JSON 스키마
+receipt_schema = {
+    "name": "receipt_schema",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "patient_name": {"type": "string", "description": "환자 이름 (한글)"},
+            "receipt_date": {"type": "string", "description": "진료일자 (YYYY-MM-DD)"},
+            "hospital_name": {"type": "string", "description": "병원명"},
+            "total_amount": {"type": "number", "description": "총 진료비"},
+            "treatment_details": {"type": "string", "description": "진료 상세내역"}
+        }
+    }
+}
+
 @router.patch("/diagnoses/ocr/{diagnosis_id}",
-    summary="진단서 OCR 처리",
-    description="AI를 사용하여 진단서 이미지에서 텍스트를 추출하고 진단 정보를 자동으로 인식하여 데이터베이스에 저장합니다.",
-    response_description="OCR 처리 완료 메시지")
-async def ocr_diagnosis(diagnosis_id: int, db: Session = Depends(get_db)):
-    """
-    진단서 OCR 실행 후 정보 추출 및 저장
-    """
+    summary="진단서 정보 추출 (Upstage Information Extraction API)",
+    description="Upstage Information Extraction API를 사용하여 진단서 이미지에서 주요 정보를 추출하고 DB에 저장합니다.",
+    response_description="OCR 정보 추출 완료 메시지")
+async def ocr_diagnosis_extract(diagnosis_id: int, db: Session = Depends(get_db)):
     try:
-        # 1. 진단서 조회
         diagnosis = db.query(MedicalDiagnosis).filter(
             MedicalDiagnosis.id == diagnosis_id,
             MedicalDiagnosis.is_deleted == False
         ).first()
-        
         if not diagnosis:
             raise HTTPException(status_code=404, detail="진단서를 찾을 수 없습니다.")
-
-        # 2. 이미지 파일 경로
-
         if not diagnosis.image_url:
             raise HTTPException(status_code=400, detail="진단서 이미지가 업로드되지 않았습니다.")
-        
+
         # 스토리지 서비스를 사용하여 파일 읽기
         try:
             if diagnosis.image_url.startswith('http'):
@@ -113,115 +137,63 @@ async def ocr_diagnosis(diagnosis_id: int, db: Session = Depends(get_db)):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"이미지 파일 읽기 실패: {str(e)}")
 
-        # 3. 이미지 base64 인코딩 및 GPT 호출
         image_b64 = base64.b64encode(image_data).decode("utf-8")
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
+        extraction_response = client.chat.completions.create(
+            model="information-extract",
             messages=[
-                {"role": "system", "content": "당신은 의료 진단서 OCR 전문 AI입니다. 정확하고 신뢰할 수 있는 정보만 추출해주세요."},
                 {
                     "role": "user",
                     "content": [
                         {
-                            "type": "text",
-                            "text": (
-                                "이 진단서 이미지에서 다음 항목을 추출해줘:\n"
-                                "1. 환자 이름 (한글 정확히 인식)\n"
-                                "2. 주민등록번호 (하이픈 포함)\n"
-                                "3. 진단명\n"
-                                "4. 진단일자 (YYYY-MM-DD 형식)\n"
-                                "5. 진단 내용 요약 (의학적 용어 사용)\n"
-                                "6. 병원명\n"
-                                "7. 의사 이름\n"
-                                "8. ICD 코드 (있는 경우)\n"
-                                "9. 입원 일수 (외래인 경우 0)\n"
-                                "JSON 형식으로 반환해줘. 키 이름은 영어로:\n"
-                                "`patient_name`, `patient_ssn`, `diagnosis_name`, `diagnosis_date`, `diagnosis_text`, `hospital_name`, `doctor_name`, `icd_code`, `admission_days`"
-                            )
-                        },
-                        {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                            "image_url": {"url": f"data:application/octet-stream;base64,{image_b64}"}
                         }
                     ]
                 }
             ],
-            max_tokens=1000
+            response_format={
+                "type": "json_schema",
+                "json_schema": diagnosis_schema
+            }
         )
+        fields = extraction_response.choices[0].message.content
 
-        # 4. 응답 파싱
-        result_text = response.choices[0].message.content
-        if result_text is None:
-            raise HTTPException(status_code=500, detail="AI 응답이 비어 있습니다.")
 
-        result_text = result_text.strip()
-
-        # ```json ... ``` 제거
-        cleaned_text = re.sub(r"```json\s*([\s\S]*?)```", r"\1", result_text, flags=re.MULTILINE)
-        if not cleaned_text:
-            raise HTTPException(status_code=500, detail="OCR 결과에 JSON 형식이 없습니다.")
-
-        parsed = json.loads(cleaned_text)
-
-        # 5. 날짜 처리
+        parsed = json.loads(fields)
+        # 날짜 및 admission_days 처리
         if parsed.get("diagnosis_date"):
             try:
                 parsed["diagnosis_date"] = datetime.strptime(parsed["diagnosis_date"], "%Y-%m-%d").date()
             except ValueError:
                 raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)")
-
-        # 6. admission_days: null → 0
         if "admission_days" in parsed:
-            if parsed["admission_days"] in [None, "", "null"]:
+            try:
+                parsed["admission_days"] = int(parsed["admission_days"])
+            except (ValueError, TypeError):
                 parsed["admission_days"] = 0
-            else:
-                try:
-                    parsed["admission_days"] = int(parsed["admission_days"])
-                except (ValueError, TypeError):
-                    parsed["admission_days"] = 0
-
-        # 7. DB 필드 업데이트
         for key, value in parsed.items():
-            if hasattr(diagnosis, key):  # 안전한 필드 업데이트
+            if hasattr(diagnosis, key):
                 setattr(diagnosis, key, value)
-
         db.commit()
         db.refresh(diagnosis)
-
-        return {
-            "message": "진단서 OCR 처리 완료",
-            "diagnosis_id": diagnosis_id,
-            "data": parsed
-        }
-
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="OCR 결과 파싱에 실패했습니다. AI 응답을 확인해주세요.")
+        return {"message": "진단서 정보 추출 완료 (Upstage Information Extraction)", "diagnosis_id": diagnosis_id, "data": parsed}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OCR 처리 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"진단서 정보 추출 실패: {str(e)}")
 
 @router.patch("/receipts/ocr/{receipt_id}",
-    summary="영수증 OCR 처리",
-    description="AI를 사용하여 영수증 이미지에서 텍스트를 추출하고 의료비 정보를 자동으로 인식하여 데이터베이스에 저장합니다.",
-    response_description="OCR 처리 완료 메시지")
-async def ocr_receipt(receipt_id: int, db: Session = Depends(get_db)):
-    """
-    영수증 OCR 실행 후 정보 추출 및 저장
-    """
+    summary="영수증 정보 추출 (Upstage Information Extraction API)",
+    description="Upstage Information Extraction API를 사용하여 영수증 이미지에서 주요 정보를 추출하고 DB에 저장합니다.",
+    response_description="OCR 정보 추출 완료 메시지")
+async def ocr_receipt_extract(receipt_id: int, db: Session = Depends(get_db)):
     try:
-        # 1. DB에서 영수증 조회
         receipt = db.query(MedicalReceipt).filter(
             MedicalReceipt.id == receipt_id,
             MedicalReceipt.is_deleted == False
         ).first()
-        
         if not receipt:
             raise HTTPException(status_code=404, detail="영수증을 찾을 수 없습니다.")
-
-        # 2. 이미지 파일 경로 파싱
         if not receipt.image_url:
             raise HTTPException(status_code=400, detail="영수증 이미지가 업로드되지 않았습니다.")
-        
         # 스토리지 서비스를 사용하여 파일 읽기
         try:
             if receipt.image_url.startswith('http'):
@@ -238,84 +210,49 @@ async def ocr_receipt(receipt_id: int, db: Session = Depends(get_db)):
                     image_data = f.read()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"이미지 파일 읽기 실패: {str(e)}")
-
-        # 3. 이미지 base64 인코딩
         image_b64 = base64.b64encode(image_data).decode("utf-8")
 
-        # 4. GPT Vision API 호출
-        response = client.chat.completions.create(
-            model="gpt-4o",
+        extraction_response = client.chat.completions.create(
+            model="information-extract",
             messages=[
-                {"role": "system", "content": "당신은 의료 영수증 OCR 전문 AI입니다. 정확한 금액과 정보를 추출해주세요."},
                 {
                     "role": "user",
                     "content": [
                         {
-                            "type": "text",
-                            "text": (
-                                "이 의료 영수증에서 다음 항목들을 추출해줘:\n"
-                                "1. 환자 이름 (한글 정확히 인식)\n"
-                                "2. 병원명\n"
-                                "3. 진료일자 (YYYY-MM-DD 형식)\n"
-                                "4. 총 진료비 (숫자만)\n"
-                                "5. 진료 상세내역 (간단한 요약)\n\n"
-                                "결과는 다음 키 이름으로 JSON 형식으로 반환해줘:\n"
-                                "`patient_name`, `hospital_name`, `receipt_date`, `total_amount`, `treatment_details`"
-                            )
-                        },
-                        {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                            "image_url": {"url": f"data:application/octet-stream;base64,{image_b64}"}
                         }
                     ]
                 }
             ],
-            max_tokens=1000
+            response_format={
+                "type": "json_schema",
+                "json_schema": receipt_schema
+            }
         )
+        fields = extraction_response.choices[0].message.content
 
-        # 5. 응답 파싱
-        if not response or not response.choices or not response.choices[0].message.content:
-            raise HTTPException(status_code=500, detail="AI 응답이 비어 있습니다.")
 
-        result_text = response.choices[0].message.content.strip()
-
-        # ```json ... ``` 제거
-        cleaned_text = re.sub(r"```json\s*([\s\S]*?)```", r"\1", result_text, flags=re.MULTILINE).strip()
-
-        parsed = json.loads(cleaned_text)
-
-        # 6. 날짜 처리
+        parsed = json.loads(fields)
+        # 날짜 및 total_amount 처리
         if parsed.get("receipt_date"):
             try:
                 parsed["receipt_date"] = datetime.strptime(parsed["receipt_date"], "%Y-%m-%d").date()
             except ValueError:
-                raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다.")
-
-        # 7. 총 금액 처리
+                raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)")
         if "total_amount" in parsed:
             try:
                 parsed["total_amount"] = float(parsed["total_amount"])
-            except:
+            except (ValueError, TypeError):
                 parsed["total_amount"] = 0.0
-
-        # 8. DB 업데이트
         for key, value in parsed.items():
-            if hasattr(receipt, key):  # 안전한 필드 업데이트
+            if hasattr(receipt, key):
                 setattr(receipt, key, value)
-
         db.commit()
         db.refresh(receipt)
-
-        return {
-            "message": "영수증 OCR 처리 완료",
-            "receipt_id": receipt_id,
-            "data": parsed
-        }
-
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="OCR 결과 파싱에 실패했습니다. AI 응답을 확인해주세요.")
+        return {"message": "영수증 정보 추출 완료 (Upstage Information Extraction)", "receipt_id": receipt_id, "data": parsed}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OCR 처리 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"영수증 정보 추출 실패: {str(e)}")
 
 # 기존 수동 수정 기능 유지
 @router.patch("/diagnoses/{diagnosis_id}",
