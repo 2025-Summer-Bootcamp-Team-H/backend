@@ -15,13 +15,16 @@ async def get_diagnosis_image(diagnosis_id: int, db: Session = Depends(get_db)):
     if not diagnosis or not diagnosis.image_url:
         raise HTTPException(status_code=404, detail="진단서 이미지가 없습니다.")
     if diagnosis.image_url.startswith("http"):
-        # GCS에서 직접 이미지 받아서 바이너리로 응답
-        r = requests.get(diagnosis.image_url)
+        # GCS에서 직접 이미지 받아서 바이너리로 응답 (리다이렉트 방지)
+        r = requests.get(diagnosis.image_url, allow_redirects=False)
         if r.status_code != 200:
             raise HTTPException(status_code=404, detail="GCS 이미지가 없습니다.")
         headers = {
             "Content-Type": r.headers.get("Content-Type", "image/jpeg"),
-            "Access-Control-Allow-Origin": "*"
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Cache-Control": "public, max-age=31536000"
         }
         return Response(content=r.content, headers=headers)
     # 이하 로컬 파일 처리 동일
@@ -38,13 +41,16 @@ async def get_receipt_image(receipt_id: int, db: Session = Depends(get_db)):
     if not receipt or not receipt.image_url:
         raise HTTPException(status_code=404, detail="영수증 이미지가 없습니다.")
     if receipt.image_url.startswith("http"):
-        # GCS에서 직접 이미지 받아서 바이너리로 응답
-        r = requests.get(receipt.image_url)
+        # GCS에서 직접 이미지 받아서 바이너리로 응답 (리다이렉트 방지)
+        r = requests.get(receipt.image_url, allow_redirects=False)
         if r.status_code != 200:
             raise HTTPException(status_code=404, detail="GCS 이미지가 없습니다.")
         headers = {
             "Content-Type": r.headers.get("Content-Type", "image/jpeg"),
-            "Access-Control-Allow-Origin": "*"
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Cache-Control": "public, max-age=31536000"
         }
         return Response(content=r.content, headers=headers)
     local_path = receipt.image_url
